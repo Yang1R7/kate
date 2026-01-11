@@ -1,0 +1,13 @@
+# Backend
+fastapi==0.115.0
+uvicorn==0.30.6
+sqlalchemy==2.0.35
+pydantic==2.9.2
+
+# Client
+requests==2.32.3
+tkcalendar==1.6.1
+
+# Password hashing
+passlib==1.7.4
+bcrypt==4.2.0
