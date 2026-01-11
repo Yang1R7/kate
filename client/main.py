@@ -507,17 +507,6 @@ class BeautyProApp:
                                 command=self.show_register_screen)
         reg_link_btn.pack(side=tk.LEFT, padx=5)
         reg_link_btn.bind('<Button-1>', lambda e: self.show_register_screen())
-        
-        info_frame = tk.Frame(container, bg=self.colors['white'], padx=15, pady=15,
-                             highlightbackground=self.colors['primary'], highlightthickness=1)
-        info_frame.pack(fill=tk.X, pady=(30, 0))
-        
-        tk.Label(info_frame, text="🔑 Тестовые данные:", font=("Arial", 10, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        tk.Label(info_frame, text="Админ: admin / admin", font=("Arial", 9),
-                bg=self.colors['white'], fg=self.colors['text']).pack(anchor=tk.W)
-        tk.Label(info_frame, text="Клиент: +79991234567 / 123456", font=("Arial", 9),
-                bg=self.colors['white'], fg=self.colors['text']).pack(anchor=tk.W)
     
     def show_register_screen(self):
         """Показать экран регистрации"""
