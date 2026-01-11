@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime, date, timedelta
 from tkcalendar import Calendar
-from api_client import BeautyProAPI
+from client.api_client import BeautyProAPI
 
 
 class HoverButton(tk.Button):
