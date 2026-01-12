@@ -50,7 +50,7 @@ class ServiceBase(BaseModel):
     name: str
     price: float
     duration_minutes: int
-    profession_id: int
+    profession_id: Optional[int] = None
 
 
 class ServiceCreate(ServiceBase):
@@ -87,7 +87,7 @@ class ServiceBrief(BaseModel):
 
 class MasterBase(BaseModel):
     full_name: str
-    profession_id: int
+    profession_id: Optional[int] = None
     contact_info: Optional[str] = None
 
 

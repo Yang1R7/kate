@@ -4,9 +4,9 @@ uvicorn==0.30.6
 sqlalchemy==2.0.35
 pydantic==2.9.2
 
-# Client
+# Client GUI
+PySide6>=6.6.0
 requests==2.32.3
-tkcalendar==1.6.1
 
 # Password hashing
 passlib==1.7.4

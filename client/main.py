@@ -1,621 +1,889 @@
 """
 BeautyPro Desktop Application
-Главное приложение с GUI на Tkinter
+Современное приложение с GUI на PySide6
 """
-import tkinter as tk
-from tkinter import ttk, messagebox
+import sys
+import os
 from datetime import datetime, date, timedelta
-from tkcalendar import Calendar
+
+# Поддержка High DPI для Windows (до импорта Qt)
+os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
+os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QPushButton, QLabel, QLineEdit, QFrame, QScrollArea, QGridLayout,
+    QStackedWidget, QTabWidget, QMessageBox, QDialog, QComboBox,
+    QSpinBox, QTableWidget, QTableWidgetItem, QHeaderView, QListWidget,
+    QListWidgetItem, QCheckBox, QSizePolicy, QSpacerItem, QCalendarWidget
+)
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Signal, QDate
+from PySide6.QtGui import QFont, QColor, QPalette, QIcon, QFontDatabase
+
 from client.api_client import BeautyProAPI
 
 
-class HoverButton(tk.Button):
-    """Кнопка с hover-эффектом"""
-    def __init__(self, master, hover_bg='#0052CC', hover_fg='white', **kwargs):
-        self.default_bg = kwargs.get('bg', '#0066FF')
-        self.default_fg = kwargs.get('fg', 'white')
-        self.hover_bg = hover_bg
-        self.hover_fg = hover_fg
-        super().__init__(master, **kwargs)
-        self.bind('<Enter>', self._on_enter)
-        self.bind('<Leave>', self._on_leave)
+class Colors:
+    """Современная цветовая палитра приложения"""
+    # Основные цвета - насыщенный синий градиент
+    PRIMARY = "#4F46E5"           # Indigo-600
+    PRIMARY_DARK = "#4338CA"      # Indigo-700
+    PRIMARY_LIGHT = "#EEF2FF"     # Indigo-50
+    PRIMARY_GRADIENT_START = "#6366F1"  # Indigo-500
+    PRIMARY_GRADIENT_END = "#4F46E5"    # Indigo-600
     
-    def _on_enter(self, e):
-        self.config(bg=self.hover_bg, fg=self.hover_fg)
+    # Фоны
+    WHITE = "#FFFFFF"
+    BACKGROUND = "#F8FAFC"        # Slate-50 - очень светлый
+    SURFACE = "#FFFFFF"
     
-    def _on_leave(self, e):
-        self.config(bg=self.default_bg, fg=self.default_fg)
+    # Текст
+    TEXT = "#0F172A"              # Slate-900 - глубокий тёмный
+    TEXT_SECONDARY = "#64748B"    # Slate-500
+    TEXT_MUTED = "#94A3B8"        # Slate-400
+    
+    # Акцентные цвета
+    DANGER = "#EF4444"            # Red-500
+    DANGER_LIGHT = "#FEF2F2"      # Red-50
+    SUCCESS = "#10B981"           # Emerald-500
+    SUCCESS_LIGHT = "#ECFDF5"     # Emerald-50
+    WARNING = "#F59E0B"           # Amber-500
+    
+    # Границы и разделители
+    BORDER = "#E2E8F0"            # Slate-200
+    BORDER_LIGHT = "#F1F5F9"      # Slate-100
+    
+    # Карточки и hover
+    CARD = "#FFFFFF"
+    CARD_HOVER = "#F8FAFC"
+    HOVER = "#EEF2FF"             # Indigo-50
+    
+    # Тени (для справки в стилях)
+    SHADOW = "rgba(15, 23, 42, 0.08)"
+    SHADOW_HOVER = "rgba(15, 23, 42, 0.12)"
 
 
-class HoverCard(tk.Frame):
-    """Карточка с hover-эффектом"""
-    def __init__(self, master, hover_bg='#F0F7FF', **kwargs):
-        self.default_bg = kwargs.get('bg', 'white')
-        self.hover_bg = hover_bg
-        super().__init__(master, **kwargs)
-        self.bind('<Enter>', self._on_enter)
-        self.bind('<Leave>', self._on_leave)
+class Styles:
+    """Глобальные стили приложения"""
     
-    def _on_enter(self, e):
-        self.config(bg=self.hover_bg)
-        for child in self.winfo_children():
-            try:
-                child.config(bg=self.hover_bg)
-                for subchild in child.winfo_children():
-                    try:
-                        subchild.config(bg=self.hover_bg)
-                    except:
-                        pass
-            except:
-                pass
-    
-    def _on_leave(self, e):
-        self.config(bg=self.default_bg)
-        for child in self.winfo_children():
-            try:
-                child.config(bg=self.default_bg)
-                for subchild in child.winfo_children():
-                    try:
-                        subchild.config(bg=self.default_bg)
-                    except:
-                        pass
-            except:
-                pass
+    MAIN_STYLE = f"""
+        QMainWindow, QWidget {{
+            background-color: {Colors.BACKGROUND};
+            font-family: 'Arial', 'Helvetica Neue', sans-serif;
+        }}
+        
+        QLabel {{
+            color: {Colors.TEXT};
+            font-size: 14px;
+        }}
+        
+        QLineEdit {{
+            padding: 14px 18px;
+            border: 2px solid {Colors.BORDER};
+            border-radius: 12px;
+            background-color: {Colors.WHITE};
+            font-size: 15px;
+            color: {Colors.TEXT};
+            selection-background-color: {Colors.PRIMARY_LIGHT};
+        }}
+        
+        QLineEdit:focus {{
+            border-color: {Colors.PRIMARY};
+            background-color: {Colors.WHITE};
+        }}
+        
+        QLineEdit:hover {{
+            border-color: {Colors.TEXT_MUTED};
+        }}
+        
+        QLineEdit::placeholder {{
+            color: {Colors.TEXT_MUTED};
+        }}
+        
+        QPushButton {{
+            padding: 14px 28px;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }}
+        
+        QPushButton#primary {{
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #667EEA, stop:1 #764BA2);
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+        }}
+        
+        QPushButton#primary:hover {{
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #5A67D8, stop:1 #6B46C1);
+        }}
+        
+        QPushButton#primary:pressed {{
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #4C51BF, stop:1 #553C9A);
+        }}
+        
+        QPushButton#secondary {{
+            background-color: {Colors.WHITE};
+            color: {Colors.PRIMARY};
+            border: 2px solid {Colors.PRIMARY};
+        }}
+        
+        QPushButton#secondary:hover {{
+            background-color: {Colors.PRIMARY_LIGHT};
+            border-color: {Colors.PRIMARY_DARK};
+        }}
+        
+        QPushButton#secondary:pressed {{
+            background-color: {Colors.HOVER};
+        }}
+        
+        QPushButton#danger {{
+            background-color: {Colors.DANGER};
+            color: white;
+        }}
+        
+        QPushButton#danger:hover {{
+            background-color: #DC2626;
+        }}
+        
+        QPushButton#ghost {{
+            background-color: transparent;
+            color: {Colors.TEXT_SECONDARY};
+            border: none;
+        }}
+        
+        QPushButton#ghost:hover {{
+            background-color: {Colors.BORDER_LIGHT};
+            color: {Colors.TEXT};
+        }}
+        
+        QPushButton#link {{
+            background-color: transparent;
+            color: {Colors.PRIMARY};
+            font-weight: 600;
+            padding: 4px 8px;
+            border: none;
+        }}
+        
+        QPushButton#link:hover {{
+            color: {Colors.PRIMARY_DARK};
+            text-decoration: underline;
+        }}
+        
+        QTabWidget::pane {{
+            border: none;
+            background-color: {Colors.BACKGROUND};
+            padding-top: 8px;
+        }}
+        
+        QTabBar::tab {{
+            padding: 14px 28px;
+            margin-right: 8px;
+            margin-top: 8px;
+            background-color: {Colors.WHITE};
+            border: none;
+            border-radius: 12px 12px 0 0;
+            font-weight: 600;
+            font-size: 14px;
+            color: {Colors.TEXT_SECONDARY};
+        }}
+        
+        QTabBar::tab:selected {{
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 {Colors.PRIMARY_GRADIENT_START}, stop:1 {Colors.PRIMARY_GRADIENT_END});
+            color: white;
+        }}
+        
+        QTabBar::tab:hover:!selected {{
+            background-color: {Colors.PRIMARY_LIGHT};
+            color: {Colors.PRIMARY};
+        }}
+        
+        QScrollArea {{
+            border: none;
+            background-color: transparent;
+        }}
+        
+        QScrollBar:vertical {{
+            background-color: {Colors.BACKGROUND};
+            width: 10px;
+            border-radius: 5px;
+        }}
+        
+        QScrollBar::handle:vertical {{
+            background-color: {Colors.BORDER};
+            border-radius: 5px;
+            min-height: 30px;
+        }}
+        
+        QScrollBar::handle:vertical:hover {{
+            background-color: {Colors.PRIMARY};
+        }}
+        
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+            height: 0px;
+        }}
+        
+        QComboBox {{
+            padding: 12px 16px;
+            border: 2px solid {Colors.BORDER};
+            border-radius: 8px;
+            background-color: {Colors.WHITE};
+            font-size: 14px;
+            color: {Colors.TEXT};
+        }}
+        
+        QComboBox:focus {{
+            border-color: {Colors.PRIMARY};
+        }}
+        
+        QComboBox::drop-down {{
+            border: none;
+            width: 30px;
+        }}
+        
+        QComboBox QAbstractItemView {{
+            background-color: {Colors.WHITE};
+            border: 2px solid {Colors.BORDER};
+            border-radius: 8px;
+            selection-background-color: {Colors.PRIMARY};
+            selection-color: white;
+            outline: none;
+        }}
+        
+        QComboBox QAbstractItemView::item {{
+            background-color: {Colors.WHITE};
+            color: {Colors.TEXT};
+            padding: 10px 16px;
+            min-height: 30px;
+        }}
+        
+        QComboBox QAbstractItemView::item:hover {{
+            background-color: {Colors.PRIMARY_LIGHT};
+            color: {Colors.PRIMARY};
+        }}
+        
+        QComboBox QAbstractItemView::item:selected {{
+            background-color: {Colors.PRIMARY};
+            color: white;
+        }}
+        
+        QTableWidget {{
+            background-color: {Colors.WHITE};
+            border: none;
+            border-radius: 8px;
+            gridline-color: {Colors.BORDER};
+            color: {Colors.TEXT};
+            alternate-background-color: {Colors.BACKGROUND};
+        }}
+        
+        QTableWidget::item {{
+            padding: 12px;
+            border-bottom: 1px solid {Colors.BORDER};
+            color: {Colors.TEXT};
+            background-color: {Colors.WHITE};
+        }}
+        
+        QTableWidget::item:selected {{
+            background-color: {Colors.PRIMARY_LIGHT};
+            color: {Colors.TEXT};
+        }}
+        
+        QTableWidget::item:alternate {{
+            background-color: {Colors.BACKGROUND};
+            color: {Colors.TEXT};
+        }}
+        
+        QHeaderView::section {{
+            background-color: {Colors.PRIMARY};
+            color: white;
+            padding: 12px;
+            border: none;
+            font-weight: bold;
+        }}
+        
+        QTableCornerButton::section {{
+            background-color: {Colors.PRIMARY};
+            border: none;
+        }}
+        
+        QCalendarWidget {{
+            background-color: {Colors.WHITE};
+        }}
+        
+        QCalendarWidget QToolButton {{
+            color: {Colors.TEXT};
+            background-color: transparent;
+            border: none;
+            border-radius: 4px;
+            padding: 8px;
+            font-weight: bold;
+        }}
+        
+        QCalendarWidget QToolButton:hover {{
+            background-color: {Colors.PRIMARY_LIGHT};
+        }}
+        
+        QCalendarWidget QMenu {{
+            background-color: {Colors.WHITE};
+        }}
+        
+        QCalendarWidget QSpinBox {{
+            background-color: {Colors.WHITE};
+            border: 1px solid {Colors.BORDER};
+            border-radius: 4px;
+        }}
+        
+        QCalendarWidget QAbstractItemView:enabled {{
+            background-color: {Colors.WHITE};
+            color: {Colors.TEXT};
+            selection-background-color: {Colors.PRIMARY};
+            selection-color: white;
+        }}
+        
+        QMessageBox {{
+            background-color: {Colors.WHITE};
+        }}
+        
+        QMessageBox QLabel {{
+            color: {Colors.TEXT};
+            font-size: 14px;
+            background: transparent;
+        }}
+        
+        QMessageBox QLabel#qt_msgbox_label {{
+            background: transparent;
+        }}
+        
+        QMessageBox QLabel#qt_msgboxex_icon_label {{
+            background: transparent;
+        }}
+        
+        QMessageBox QPushButton {{
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #667EEA, stop:1 #764BA2);
+            color: white;
+            font-weight: bold;
+            font-size: 13px;
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            min-width: 70px;
+        }}
+        
+        QMessageBox QPushButton:hover {{
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #5A67D8, stop:1 #6B46C1);
+        }}
+        
+        QMessageBox QPushButton:pressed {{
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #4C51BF, stop:1 #553C9A);
+        }}
+    """
 
 
-class BeautyProApp:
+class Card(QFrame):
+    """Современная карточка с улучшенным дизайном"""
+    clicked = Signal()
+    
+    def __init__(self, parent=None, clickable=False, padding=20):
+        super().__init__(parent)
+        self.clickable = clickable
+        self._padding = padding
+        
+        # Базовый стиль карточки
+        base_style = f"""
+            Card {{
+                background-color: {Colors.WHITE};
+                border-radius: 16px;
+                border: 1px solid {Colors.BORDER};
+                padding: {padding}px;
+            }}
+        """
+        
+        if clickable:
+            self.setStyleSheet(base_style + f"""
+                Card:hover {{
+                    border-color: {Colors.PRIMARY};
+                    background-color: {Colors.PRIMARY_LIGHT};
+                }}
+            """)
+            self.setCursor(Qt.PointingHandCursor)
+        else:
+            self.setStyleSheet(base_style)
+    
+    def mousePressEvent(self, event):
+        if self.clickable:
+            self.clicked.emit()
+        super().mousePressEvent(event)
+    
+    def enterEvent(self, event):
+        if self.clickable:
+            # Добавляем эффект подъёма при наведении
+            pass
+        super().enterEvent(event)
+
+
+class ModernButton(QPushButton):
+    """Современная кнопка с улучшенным дизайном"""
+    
+    def __init__(self, text, style="primary", parent=None, icon=None):
+        super().__init__(text, parent)
+        self.setObjectName(style)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setMinimumHeight(48)
+        
+        # Добавляем иконку если передана
+        if icon:
+            self.setText(f"{icon}  {text}")
+        
+        # Устанавливаем шрифт
+        font = self.font()
+        font.setWeight(QFont.DemiBold)
+        self.setFont(font)
+
+
+class ModernInput(QLineEdit):
+    """Современное поле ввода с улучшенным дизайном"""
+    
+    def __init__(self, placeholder="", parent=None, password=False):
+        super().__init__(parent)
+        self.setPlaceholderText(placeholder)
+        if password:
+            self.setEchoMode(QLineEdit.Password)
+        self.setMinimumHeight(48)
+
+
+class BeautyProApp(QMainWindow):
     """Главное приложение BeautyPro"""
     
-    def __init__(self, root):
-        self.root = root
-        self.root.title("BeautyPro - Салон красоты")
-        self.root.geometry("1100x700")
-        self.root.minsize(900, 600)
-        
+    def __init__(self):
+        super().__init__()
         self.api = BeautyProAPI()
         self.current_user = None
         self.selected_master = None
         self.selected_service = None
-        self.loading_overlay = None
         
-        self.setup_styles()
-        self.show_login_screen()
+        self.setup_ui()
     
-    def create_styled_button(self, parent, text, command, style='primary', width=None):
-        """Создать стилизованную кнопку (работает на macOS)"""
-        styles = {
-            'primary': {'bg': '#0066FF', 'fg': 'white', 
-                       'hover_bg': '#0052CC', 'hover_fg': 'white'},
-            'success': {'bg': '#0066FF', 'fg': 'white', 
-                       'hover_bg': '#0052CC', 'hover_fg': 'white'},
-            'danger': {'bg': '#CC0000', 'fg': 'white', 
-                      'hover_bg': '#990000', 'hover_fg': 'white'},
-            'accent': {'bg': '#0066FF', 'fg': 'white', 
-                      'hover_bg': '#0052CC', 'hover_fg': 'white'},
-            'secondary': {'bg': '#0066FF', 'fg': 'white', 
-                         'hover_bg': '#0052CC', 'hover_fg': 'white'},
-        }
-        s = styles.get(style, styles['primary'])
+    def setup_ui(self):
+        """Настройка интерфейса"""
+        self.setWindowTitle("BeautyPro - Салон красоты")
+        self.setMinimumSize(1100, 700)
+        self.setStyleSheet(Styles.MAIN_STYLE)
         
-        # Используем Frame + Label для корректного отображения на macOS
-        frame = tk.Frame(parent, bg=s['bg'], cursor="hand2")
+        # Центральный виджет со стеком экранов
+        self.central_widget = QStackedWidget()
+        self.setCentralWidget(self.central_widget)
         
-        label = tk.Label(frame, text=text, font=("Arial", 11, "bold"),
-                        bg=s['bg'], fg=s['fg'], padx=15, pady=8, cursor="hand2")
-        label.pack()
+        # Создаем экраны
+        self.login_screen = self.create_login_screen()
+        self.register_screen = self.create_register_screen()
+        self.client_screen = None
+        self.admin_screen = None
         
-        def on_click(e):
-            command()
+        self.central_widget.addWidget(self.login_screen)
+        self.central_widget.addWidget(self.register_screen)
         
-        def on_enter(e):
-            frame.config(bg=s['hover_bg'])
-            label.config(bg=s['hover_bg'], fg=s['hover_fg'])
-        
-        def on_leave(e):
-            frame.config(bg=s['bg'])
-            label.config(bg=s['bg'], fg=s['fg'])
-        
-        frame.bind('<Button-1>', on_click)
-        label.bind('<Button-1>', on_click)
-        frame.bind('<Enter>', on_enter)
-        frame.bind('<Leave>', on_leave)
-        label.bind('<Enter>', on_enter)
-        label.bind('<Leave>', on_leave)
-        
-        return frame
+        self.show_login()
     
-    def create_button(self, parent, text, command, bg=None, fg=None, font=None, 
-                     width=None, padx=15, pady=8, relief="flat"):
-        """Создать кнопку с полной кликабельностью (работает на macOS)"""
-        if bg is None:
-            bg = '#0066FF'
-        if fg is None:
-            fg = 'white'
-        if font is None:
-            font = ("Arial", 11, "bold")
-        
-        # Определяем цвет при наведении
-        hover_bg = '#0052CC' if bg == '#0066FF' else ('#990000' if bg == self.colors['danger'] else bg)
-        
-        # Используем Frame + Label для корректного отображения на macOS
-        frame = tk.Frame(parent, bg=bg, cursor="hand2")
-        
-        label = tk.Label(frame, text=text, font=font, bg=bg, fg=fg,
-                        padx=padx, pady=pady, cursor="hand2")
-        label.pack()
-        
-        def on_click(e):
-            command()
-        
-        def on_enter(e):
-            frame.config(bg=hover_bg)
-            label.config(bg=hover_bg)
-        
-        def on_leave(e):
-            frame.config(bg=bg)
-            label.config(bg=bg)
-        
-        frame.bind('<Button-1>', on_click)
-        label.bind('<Button-1>', on_click)
-        frame.bind('<Enter>', on_enter)
-        frame.bind('<Leave>', on_leave)
-        label.bind('<Enter>', on_enter)
-        label.bind('<Leave>', on_leave)
-        
-        return frame
+    def show_login(self):
+        """Показать экран входа"""
+        self.central_widget.setCurrentWidget(self.login_screen)
     
-    def create_card(self, parent, hover=True):
-        """Создать карточку с белым фоном и синей рамкой"""
-        if hover:
-            card = HoverCard(parent, bg=self.colors['white'], hover_bg=self.colors['light'], 
-                           padx=15, pady=15, relief="flat", bd=0,
-                           highlightbackground=self.colors['primary'], highlightthickness=1)
-            return card
-        return tk.Frame(parent, bg=self.colors['white'], padx=15, pady=15, relief="flat", bd=0,
-                       highlightbackground=self.colors['primary'], highlightthickness=1)
-    
-    def show_loading(self, message="Загрузка..."):
-        """Показать индикатор загрузки"""
-        if self.loading_overlay:
-            return
-        self.loading_overlay = tk.Frame(self.root, bg='#00000080')
-        self.loading_overlay.place(relx=0, rely=0, relwidth=1, relheight=1)
-        
-        box = tk.Frame(self.loading_overlay, bg=self.colors['white'], padx=30, pady=20)
-        box.place(relx=0.5, rely=0.5, anchor='center')
-        
-        self.spinner_label = tk.Label(box, text="⏳", font=("Arial", 30), bg=self.colors['white'],
-                                     fg=self.colors['primary'])
-        self.spinner_label.pack()
-        
-        tk.Label(box, text=message, font=("Arial", 12), bg=self.colors['white'], 
-                fg=self.colors['text']).pack(pady=(10, 0))
-        
-        self.root.update()
-    
-    def hide_loading(self):
-        """Скрыть индикатор загрузки"""
-        if self.loading_overlay:
-            self.loading_overlay.destroy()
-            self.loading_overlay = None
-    
-    def setup_styles(self):
-        """Настройка стилей приложения"""
-        style = ttk.Style()
-        
-        # Используем тему 'clam' для светлого фона
-        try:
-            style.theme_use('clam')
-        except:
-            pass
-        
-        # Сине-белая цветовая схема с чёрным текстом
-        self.colors = {
-            'primary': '#0066FF',        # Основной синий
-            'primary_dark': '#0052CC',   # Тёмно-синий для hover
-            'secondary': '#0066FF',
-            'accent': '#0066FF',
-            'success': '#0066FF',
-            'warning': '#0066FF',
-            'danger': '#CC0000',          # Красный для удаления
-            'info': '#0066FF',
-            'light': '#F0F7FF',           # Очень светлый синий для hover
-            'dark': '#0066FF',
-            'white': '#FFFFFF',           # Белый фон
-            'gray': '#555555',            # Серый для второстепенного текста
-            'bg': '#FFFFFF',
-            'btn_bg': '#FFFFFF',
-            'btn_hover': '#E8F2FF',
-            'border': '#0066FF',
-            'card_bg': '#FFFFFF',
-            'text': '#000000',            # Чёрный текст
-            'text_dark': '#000000',       # Чёрный текст
-        }
-        
-        self.root.configure(bg=self.colors['white'])
-        
-        # Настройка выпадающего списка Combobox
-        self.root.option_add('*TCombobox*Listbox.background', 'white')
-        self.root.option_add('*TCombobox*Listbox.foreground', self.colors['text'])
-        self.root.option_add('*TCombobox*Listbox.selectBackground', self.colors['primary'])
-        self.root.option_add('*TCombobox*Listbox.selectForeground', 'white')
-        
-        style.configure("TFrame", background=self.colors['white'], borderwidth=0)
-        style.configure("Card.TFrame", background=self.colors['white'], relief="flat", borderwidth=0)
-        style.configure("TLabelframe", background=self.colors['white'], borderwidth=0)
-        style.configure("TLabelframe.Label", background=self.colors['white'], 
-                       foreground=self.colors['primary'], font=("Arial", 11, "bold"))
-        style.configure("TScrollbar", background=self.colors['white'], troughcolor=self.colors['white'])
-        
-        # Белый фон для всех элементов
-        style.configure(".", background=self.colors['white'])
-        
-        style.configure("Title.TLabel", font=("Arial", 24, "bold"), 
-                       foreground=self.colors['primary'], background=self.colors['white'])
-        style.configure("Subtitle.TLabel", font=("Arial", 12), 
-                       foreground=self.colors['text'], background=self.colors['white'])
-        style.configure("TLabel", background=self.colors['white'], foreground=self.colors['text'])
-        
-        style.configure("TButton", font=("Arial", 10), foreground=self.colors['white'],
-                       background=self.colors['primary'], padding=(15, 8))
-        style.map("TButton", background=[('active', self.colors['primary_dark'])])
-        
-        # Notebook без серого фона - полностью белый
-        style.configure("TNotebook", background=self.colors['white'], borderwidth=0, padding=0,
-                       tabmargins=[0, 0, 0, 0])
-        style.configure("TNotebook.Tab", font=("Arial", 11, "bold"), padding=(20, 10),
-                       foreground=self.colors['white'], background=self.colors['primary'])
-        style.map("TNotebook.Tab",
-                 background=[('selected', self.colors['primary_dark']), ('!selected', self.colors['primary'])],
-                 foreground=[('selected', self.colors['white']), ('!selected', self.colors['white'])])
-        
-        style.configure("TEntry", fieldbackground='white', foreground=self.colors['text'], padding=8)
-        
-        style.configure("TCombobox", fieldbackground='white', background='white',
-                       foreground=self.colors['text'], arrowcolor=self.colors['primary'],
-                       selectbackground=self.colors['primary'], selectforeground='white')
-        style.map("TCombobox", 
-                 fieldbackground=[('readonly', 'white'), ('disabled', 'white'), ('active', 'white')],
-                 background=[('readonly', 'white'), ('disabled', 'white'), ('active', 'white')],
-                 foreground=[('readonly', self.colors['text']), ('disabled', self.colors['gray'])])
-        
-        # Стиль таблицы с белым фоном везде
-        style.configure("Treeview", 
-                       background='white', 
-                       fieldbackground='white',
-                       foreground=self.colors['text'], 
-                       font=("Arial", 10), 
-                       rowheight=32,
-                       borderwidth=0,
-                       relief="flat")
-        style.configure("Treeview.Heading", 
-                       font=("Arial", 10, "bold"),
-                       background=self.colors['primary'], 
-                       foreground='white',
-                       borderwidth=0,
-                       relief="flat",
-                       padding=(10, 8))
-        style.map("Treeview", 
-                 background=[('selected', self.colors['light']), ('!selected', 'white')],
-                 fieldbackground=[('!disabled', 'white')],
-                 foreground=[('selected', self.colors['primary']), ('!selected', self.colors['text'])])
-        style.map("Treeview.Heading", 
-                 background=[('active', self.colors['primary_dark'])])
-        
-        # Убираем серый фон у пустой области Treeview
-        style.layout("Treeview", [('Treeview.treearea', {'sticky': 'nswe', 'border': '0'})])
-        
-        # Принудительно белый фон для всех пустых областей
-        self.root.option_add('*Treeview*background', 'white')
-        self.root.option_add('*Treeview*fieldBackground', 'white')
-    
-    def bind_mousewheel(self, canvas, scrollable_frame, parent_window=None):
-        """Привязать прокрутку колесом мыши к canvas (работает на macOS с trackpad)"""
-        
-        # Определяем родительское окно
-        if parent_window is None:
-            parent_window = canvas.winfo_toplevel()
-        
-        def _scroll(event):
-            """Универсальный обработчик скролла"""
-            # Проверяем, что canvas существует и видим
-            try:
-                if not canvas.winfo_exists():
-                    return
-            except:
-                return
-            
-            import platform
-            system = platform.system()
-            
-            if system == 'Darwin':  # macOS
-                # На macOS trackpad отправляет delta как количество пикселей
-                # Для плавного скролла используем yview_scroll с "units"
-                if event.delta > 0:
-                    canvas.yview_scroll(-2, "units")
-                elif event.delta < 0:
-                    canvas.yview_scroll(2, "units")
-            elif system == 'Windows':
-                canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            else:  # Linux
-                if hasattr(event, 'num'):
-                    if event.num == 4:
-                        canvas.yview_scroll(-2, "units")
-                    elif event.num == 5:
-                        canvas.yview_scroll(2, "units")
-        
-        # Флаг для отслеживания состояния мыши над canvas
-        canvas._mouse_over = False
-        
-        def _on_enter(event):
-            canvas._mouse_over = True
-        
-        def _on_leave(event):
-            canvas._mouse_over = False
-        
-        def _global_scroll(event):
-            """Глобальный обработчик - проверяет, над каким виджетом мышь"""
-            try:
-                if canvas._mouse_over and canvas.winfo_exists():
-                    _scroll(event)
-            except:
-                pass
-        
-        # Привязываем Enter/Leave к canvas
-        canvas.bind("<Enter>", _on_enter)
-        canvas.bind("<Leave>", _on_leave)
-        
-        # Привязываем Enter/Leave ко всем дочерним элементам
-        def bind_children(widget):
-            for child in widget.winfo_children():
-                child.bind("<Enter>", lambda e: setattr(canvas, '_mouse_over', True))
-                child.bind("<Leave>", lambda e: None)  # Не сбрасываем при переходе между детьми
-                bind_children(child)
-        
-        bind_children(scrollable_frame)
-        
-        # Глобальная привязка к окну
-        import platform
-        if platform.system() == 'Darwin':
-            parent_window.bind("<MouseWheel>", _global_scroll, add='+')
-        elif platform.system() == 'Windows':
-            parent_window.bind("<MouseWheel>", _global_scroll, add='+')
-        else:
-            parent_window.bind("<Button-4>", _global_scroll, add='+')
-            parent_window.bind("<Button-5>", _global_scroll, add='+')
-    
-    def create_white_dropdown(self, parent, variable, values, width=40):
-        """Создать выпадающий список с белым фоном (работает на macOS)"""
-        # Контейнер с рамкой
-        container = tk.Frame(parent, bg=self.colors['primary'], padx=2, pady=2)
-        
-        # Внутренний фрейм
-        inner = tk.Frame(container, bg='white')
-        inner.pack(fill=tk.X)
-        
-        # Используем OptionMenu вместо Combobox для белого фона на macOS
-        if values:
-            variable.set(values[0] if not variable.get() else variable.get())
-        
-        dropdown = tk.OptionMenu(inner, variable, *values if values else [''])
-        dropdown.config(
-            bg='white', fg='black', 
-            activebackground=self.colors['light'], activeforeground='black',
-            font=("Arial", 11), width=width-5,
-            highlightthickness=0, relief='flat',
-            anchor='w', padx=10
-        )
-        dropdown['menu'].config(
-            bg='white', fg='black',
-            activebackground=self.colors['primary'], activeforeground='white',
-            font=("Arial", 11)
-        )
-        dropdown.pack(fill=tk.X, ipady=5)
-        
-        return container, dropdown
-    
-    def clear_root(self):
-        """Очистить главное окно"""
-        for widget in self.root.winfo_children():
-            widget.destroy()
-    
-    def show_login_screen(self):
-        """Показать экран авторизации"""
-        self.clear_root()
-        
-        main_frame = tk.Frame(self.root, bg=self.colors['white'])
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        left_panel = tk.Frame(main_frame, bg=self.colors['primary'], width=400)
-        left_panel.pack(side=tk.LEFT, fill=tk.Y)
-        left_panel.pack_propagate(False)
-        
-        left_content = tk.Frame(left_panel, bg=self.colors['primary'])
-        left_content.place(relx=0.5, rely=0.5, anchor="center")
-        
-        tk.Label(left_content, text="💇‍♀️", font=("Arial", 80),
-                bg=self.colors['primary'], fg=self.colors['white']).pack(pady=(0, 20))
-        tk.Label(left_content, text="BeautyPro", font=("Arial", 36, "bold"),
-                bg=self.colors['primary'], fg=self.colors['white']).pack()
-        tk.Label(left_content, text="Салон красоты", font=("Arial", 16),
-                bg=self.colors['primary'], fg=self.colors['white']).pack(pady=(5, 30))
-        tk.Label(left_content, text="✨ Красота начинается здесь ✨", font=("Arial", 12, "italic"),
-                bg=self.colors['primary'], fg=self.colors['white']).pack()
-        
-        right_panel = tk.Frame(main_frame, bg=self.colors['white'])
-        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        
-        container = tk.Frame(right_panel, bg=self.colors['white'])
-        container.place(relx=0.5, rely=0.5, anchor="center")
-        
-        tk.Label(container, text="Добро пожаловать!", font=("Arial", 24, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(pady=(0, 5))
-        tk.Label(container, text="Войдите в свой аккаунт", font=("Arial", 12),
-                bg=self.colors['white'], fg=self.colors['text']).pack(pady=(0, 30))
-        
-        form_frame = tk.Frame(container, bg=self.colors['white'], padx=30, pady=30)
-        form_frame.pack(fill=tk.X)
-        
-        tk.Label(form_frame, text="📱 Номер телефона", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        self.phone_entry = tk.Entry(form_frame, width=35, font=("Arial", 12), relief="solid", bd=2,
-                                   bg=self.colors['primary'], fg="white", insertbackground="white",
-                                   highlightthickness=2, highlightcolor=self.colors['primary'],
-                                   highlightbackground=self.colors['primary'])
-        self.phone_entry.pack(fill=tk.X, pady=(5, 15), ipady=8)
-        
-        tk.Label(form_frame, text="🔒 Пароль", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        self.password_entry = tk.Entry(form_frame, width=35, font=("Arial", 12), show="●", relief="solid", bd=2,
-                                      bg=self.colors['primary'], fg="white", insertbackground="white",
-                                      highlightthickness=2, highlightcolor=self.colors['primary'],
-                                      highlightbackground=self.colors['primary'])
-        self.password_entry.pack(fill=tk.X, pady=(5, 20), ipady=8)
-        
-        # Кнопка Войти (Frame + Label для macOS)
-        login_frame = tk.Frame(form_frame, bg=self.colors['primary'], cursor="hand2")
-        login_frame.pack(fill=tk.X)
-        login_label = tk.Label(login_frame, text="   Войти   ", font=("Arial", 12, "bold"),
-                              bg=self.colors['primary'], fg=self.colors['white'],
-                              padx=20, pady=12, cursor="hand2")
-        login_label.pack(fill=tk.X)
-        
-        def login_enter(e):
-            login_frame.config(bg=self.colors['primary_dark'])
-            login_label.config(bg=self.colors['primary_dark'])
-        def login_leave(e):
-            login_frame.config(bg=self.colors['primary'])
-            login_label.config(bg=self.colors['primary'])
-        
-        login_frame.bind('<Button-1>', lambda e: self.do_login())
-        login_label.bind('<Button-1>', lambda e: self.do_login())
-        login_frame.bind('<Enter>', login_enter)
-        login_frame.bind('<Leave>', login_leave)
-        login_label.bind('<Enter>', login_enter)
-        login_label.bind('<Leave>', login_leave)
-        
-        reg_frame = tk.Frame(container, bg=self.colors['white'])
-        reg_frame.pack(fill=tk.X, pady=(20, 0))
-        
-        tk.Label(reg_frame, text="Нет аккаунта?", font=("Arial", 10),
-                bg=self.colors['white'], fg=self.colors['text']).pack(side=tk.LEFT)
-        
-        reg_link_btn = tk.Button(reg_frame, text=" Зарегистрироваться ", font=("Arial", 10, "bold", "underline"),
-                                bg=self.colors['white'], fg=self.colors['primary'],
-                                activebackground=self.colors['white'], activeforeground=self.colors['primary_dark'],
-                                relief="flat", bd=0, cursor="hand2", padx=5, pady=3,
-                                command=self.show_register_screen)
-        reg_link_btn.pack(side=tk.LEFT, padx=5)
-        reg_link_btn.bind('<Button-1>', lambda e: self.show_register_screen())
-    
-    def show_register_screen(self):
+    def show_register(self):
         """Показать экран регистрации"""
-        self.clear_root()
+        self.central_widget.setCurrentWidget(self.register_screen)
+    
+    def styled_question(self, parent, title, message):
+        """Создать стилизованный диалог подтверждения"""
+        msg_box = QMessageBox(parent)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+        msg_box.setIcon(QMessageBox.Question)
         
-        main_frame = tk.Frame(self.root, bg=self.colors['white'])
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        # Добавляем кнопки
+        yes_btn = msg_box.addButton("Да", QMessageBox.YesRole)
+        no_btn = msg_box.addButton("Нет", QMessageBox.NoRole)
         
-        left_panel = tk.Frame(main_frame, bg=self.colors['primary'], width=400)
-        left_panel.pack(side=tk.LEFT, fill=tk.Y)
-        left_panel.pack_propagate(False)
+        # Стилизуем кнопки
+        button_style = """
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #667EEA, stop:1 #764BA2);
+                color: white;
+                font-weight: bold;
+                font-size: 13px;
+                padding: 10px 24px;
+                border-radius: 8px;
+                border: none;
+                min-width: 80px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #5A67D8, stop:1 #6B46C1);
+            }
+        """
+        yes_btn.setStyleSheet(button_style)
+        no_btn.setStyleSheet(button_style.replace("#667EEA", "#6B7280").replace("#764BA2", "#4B5563").replace("#5A67D8", "#4B5563").replace("#6B46C1", "#374151"))
         
-        left_content = tk.Frame(left_panel, bg=self.colors['primary'])
-        left_content.place(relx=0.5, rely=0.5, anchor="center")
+        msg_box.exec()
+        return msg_box.clickedButton() == yes_btn
+    
+    def styled_info(self, parent, title, message):
+        """Создать стилизованное информационное сообщение"""
+        msg_box = QMessageBox(parent)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+        msg_box.setIcon(QMessageBox.Information)
         
-        tk.Label(left_content, text="✨", font=("Arial", 80),
-                bg=self.colors['primary'], fg=self.colors['white']).pack(pady=(0, 20))
-        tk.Label(left_content, text="Присоединяйтесь!", font=("Arial", 28, "bold"),
-                bg=self.colors['primary'], fg=self.colors['white']).pack()
-        tk.Label(left_content, text="Создайте аккаунт\nи записывайтесь онлайн", font=("Arial", 14),
-                bg=self.colors['primary'], fg=self.colors['white'], justify="center").pack(pady=(10, 0))
+        ok_btn = msg_box.addButton("OK", QMessageBox.AcceptRole)
+        ok_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #667EEA, stop:1 #764BA2);
+                color: white;
+                font-weight: bold;
+                font-size: 13px;
+                padding: 8px 20px;
+                border-radius: 6px;
+                border: none;
+                min-width: 70px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #5A67D8, stop:1 #6B46C1);
+            }
+        """)
         
-        right_panel = tk.Frame(main_frame, bg=self.colors['white'])
-        right_panel.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        msg_box.exec()
+    
+    def create_login_screen(self):
+        """Создать экран входа"""
+        screen = QWidget()
+        layout = QHBoxLayout(screen)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
         
-        container = tk.Frame(right_panel, bg=self.colors['white'])
-        container.place(relx=0.5, rely=0.5, anchor="center")
+        # Левая панель с градиентом
+        left_panel = QFrame()
+        left_panel.setFixedWidth(480)
+        left_panel.setStyleSheet(f"""
+            QFrame {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 {Colors.PRIMARY_GRADIENT_START}, 
+                    stop:0.5 {Colors.PRIMARY},
+                    stop:1 {Colors.PRIMARY_DARK});
+            }}
+            QLabel {{
+                color: white;
+                background: transparent;
+            }}
+        """)
         
-        tk.Label(container, text="Регистрация", font=("Arial", 24, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(pady=(0, 30))
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setAlignment(Qt.AlignCenter)
+        left_layout.setSpacing(16)
+        left_layout.setContentsMargins(40, 40, 40, 40)
         
-        form_frame = tk.Frame(container, bg=self.colors['white'], padx=30, pady=30)
-        form_frame.pack(fill=tk.X)
+        # Логотип - красивый круг
+        logo_container = QLabel("✦")
+        logo_container.setFont(QFont("Arial", 64))
+        logo_container.setAlignment(Qt.AlignCenter)
+        logo_container.setStyleSheet("font-size: 64px;")
+        left_layout.addWidget(logo_container)
         
-        tk.Label(form_frame, text="👤 ФИО", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        self.reg_name_entry = tk.Entry(form_frame, width=35, font=("Arial", 12), relief="solid", bd=2,
-                                       bg=self.colors['primary'], fg="white", insertbackground="white",
-                                       highlightthickness=2, highlightcolor=self.colors['primary'],
-                                       highlightbackground=self.colors['primary'])
-        self.reg_name_entry.pack(fill=tk.X, pady=(5, 15), ipady=8)
+        title = QLabel("BeautyPro")
+        title.setFont(QFont("Arial", 42, QFont.Bold))
+        title.setAlignment(Qt.AlignCenter)
+        left_layout.addWidget(title)
         
-        tk.Label(form_frame, text="📱 Номер телефона", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        self.reg_phone_entry = tk.Entry(form_frame, width=35, font=("Arial", 12), relief="solid", bd=2,
-                                        bg=self.colors['primary'], fg="white", insertbackground="white",
-                                        highlightthickness=2, highlightcolor=self.colors['primary'],
-                                        highlightbackground=self.colors['primary'])
-        self.reg_phone_entry.pack(fill=tk.X, pady=(5, 15), ipady=8)
+        subtitle = QLabel("Салон красоты")
+        subtitle.setFont(QFont("Arial", 18))
+        subtitle.setStyleSheet("color: rgba(255, 255, 255, 0.85);")
+        subtitle.setAlignment(Qt.AlignCenter)
+        left_layout.addWidget(subtitle)
         
-        tk.Label(form_frame, text="🔒 Пароль", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        self.reg_password_entry = tk.Entry(form_frame, width=35, font=("Arial", 12), show="●", relief="solid", bd=2,
-                                           bg=self.colors['primary'], fg="white", insertbackground="white",
-                                           highlightthickness=2, highlightcolor=self.colors['primary'],
-                                           highlightbackground=self.colors['primary'])
-        self.reg_password_entry.pack(fill=tk.X, pady=(5, 20), ipady=8)
+        # Разделитель
+        left_layout.addSpacing(30)
         
-        # Кнопка Зарегистрироваться (Frame + Label для macOS)
-        reg_frame = tk.Frame(form_frame, bg=self.colors['primary'], cursor="hand2")
-        reg_frame.pack(fill=tk.X)
-        reg_label = tk.Label(reg_frame, text="   Зарегистрироваться   ", font=("Arial", 12, "bold"),
-                            bg=self.colors['primary'], fg=self.colors['white'],
-                            padx=20, pady=12, cursor="hand2")
-        reg_label.pack(fill=tk.X)
+        slogan = QLabel("✨ Красота начинается здесь ✨")
+        slogan.setFont(QFont("Arial", 14))
+        slogan.setStyleSheet("font-style: italic; color: rgba(255, 255, 255, 0.7);")
+        slogan.setAlignment(Qt.AlignCenter)
+        left_layout.addWidget(slogan)
         
-        def reg_enter(e):
-            reg_frame.config(bg=self.colors['primary_dark'])
-            reg_label.config(bg=self.colors['primary_dark'])
-        def reg_leave(e):
-            reg_frame.config(bg=self.colors['primary'])
-            reg_label.config(bg=self.colors['primary'])
+        layout.addWidget(left_panel)
         
-        reg_frame.bind('<Button-1>', lambda e: self.do_register())
-        reg_label.bind('<Button-1>', lambda e: self.do_register())
-        reg_frame.bind('<Enter>', reg_enter)
-        reg_frame.bind('<Leave>', reg_leave)
-        reg_label.bind('<Enter>', reg_enter)
-        reg_label.bind('<Leave>', reg_leave)
+        # Правая панель (форма)
+        right_panel = QFrame()
+        right_panel.setStyleSheet(f"background-color: {Colors.WHITE};")
         
-        # Кнопка Назад (Frame + Label для macOS)
-        back_frame = tk.Frame(container, bg=self.colors['primary'], cursor="hand2")
-        back_frame.pack(pady=(20, 0))
-        back_label = tk.Label(back_frame, text="   Назад к входу   ", font=("Arial", 10, "bold"),
-                             bg=self.colors['primary'], fg=self.colors['white'],
-                             padx=15, pady=8, cursor="hand2")
-        back_label.pack()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setAlignment(Qt.AlignCenter)
         
-        def back_enter(e):
-            back_frame.config(bg=self.colors['primary_dark'])
-            back_label.config(bg=self.colors['primary_dark'])
-        def back_leave(e):
-            back_frame.config(bg=self.colors['primary'])
-            back_label.config(bg=self.colors['primary'])
+        # Форма входа
+        form_container = QWidget()
+        form_container.setFixedWidth(420)
+        form_layout = QVBoxLayout(form_container)
+        form_layout.setSpacing(8)
         
-        back_frame.bind('<Button-1>', lambda e: self.show_login_screen())
-        back_label.bind('<Button-1>', lambda e: self.show_login_screen())
-        back_frame.bind('<Enter>', back_enter)
-        back_frame.bind('<Leave>', back_leave)
-        back_label.bind('<Enter>', back_enter)
-        back_label.bind('<Leave>', back_leave)
+        welcome_label = QLabel("Добро пожаловать!")
+        welcome_label.setFont(QFont("Arial", 32, QFont.Bold))
+        welcome_label.setStyleSheet(f"color: {Colors.TEXT};")
+        welcome_label.setAlignment(Qt.AlignCenter)
+        form_layout.addWidget(welcome_label)
+        
+        subtitle_label = QLabel("Войдите в свой аккаунт")
+        subtitle_label.setFont(QFont("Arial", 15))
+        subtitle_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; margin-bottom: 32px;")
+        subtitle_label.setAlignment(Qt.AlignCenter)
+        form_layout.addWidget(subtitle_label)
+        
+        # Поля формы с иконками
+        phone_label = QLabel("📱  Номер телефона")
+        phone_label.setFont(QFont("Arial", 13, QFont.DemiBold))
+        phone_label.setStyleSheet(f"color: {Colors.TEXT}; margin-top: 8px;")
+        form_layout.addWidget(phone_label)
+        
+        self.login_phone = ModernInput("+7 (999) 123-45-67")
+        form_layout.addWidget(self.login_phone)
+        
+        password_label = QLabel("🔒  Пароль")
+        password_label.setFont(QFont("Arial", 13, QFont.DemiBold))
+        password_label.setStyleSheet(f"color: {Colors.TEXT}; margin-top: 12px;")
+        form_layout.addWidget(password_label)
+        
+        self.login_password = ModernInput("Введите пароль", password=True)
+        form_layout.addWidget(self.login_password)
+        
+        # Отступ перед кнопкой
+        form_layout.addSpacing(24)
+        
+        # Кнопка входа
+        login_btn = ModernButton("Войти →", "primary")
+        login_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #667EEA, stop:1 #764BA2);
+                color: white;
+                font-weight: bold;
+                font-size: 15px;
+                padding: 14px 28px;
+                border-radius: 12px;
+                border: none;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #5A67D8, stop:1 #6B46C1);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4C51BF, stop:1 #553C9A);
+            }
+        """)
+        login_btn.clicked.connect(self.do_login)
+        form_layout.addWidget(login_btn)
+        
+        # Ссылка на регистрацию
+        form_layout.addSpacing(16)
+        
+        reg_container = QWidget()
+        reg_layout = QHBoxLayout(reg_container)
+        reg_layout.setAlignment(Qt.AlignCenter)
+        
+        reg_text = QLabel("Нет аккаунта?")
+        reg_text.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
+        reg_layout.addWidget(reg_text)
+        
+        reg_btn = ModernButton("Зарегистрироваться", "link")
+        reg_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                color: {Colors.PRIMARY};
+                font-weight: bold;
+                font-size: 14px;
+                padding: 8px 16px;
+                border: none;
+                text-decoration: underline;
+            }}
+            QPushButton:hover {{
+                color: {Colors.PRIMARY_DARK};
+            }}
+        """)
+        reg_btn.clicked.connect(self.show_register)
+        reg_layout.addWidget(reg_btn)
+        
+        form_layout.addWidget(reg_container)
+        
+        right_layout.addWidget(form_container)
+        layout.addWidget(right_panel)
+        
+        return screen
+    
+    def create_register_screen(self):
+        """Создать экран регистрации"""
+        screen = QWidget()
+        layout = QHBoxLayout(screen)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Левая панель
+        left_panel = QFrame()
+        left_panel.setFixedWidth(480)
+        left_panel.setStyleSheet(f"""
+            QFrame {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+                    stop:0 {Colors.PRIMARY_GRADIENT_START}, 
+                    stop:0.5 {Colors.PRIMARY},
+                    stop:1 {Colors.PRIMARY_DARK});
+            }}
+            QLabel {{
+                color: white;
+                background: transparent;
+            }}
+        """)
+        
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setAlignment(Qt.AlignCenter)
+        left_layout.setSpacing(16)
+        left_layout.setContentsMargins(40, 40, 40, 40)
+        
+        icon = QLabel("✦")
+        icon.setFont(QFont("Arial", 64))
+        icon.setAlignment(Qt.AlignCenter)
+        icon.setStyleSheet("font-size: 64px;")
+        left_layout.addWidget(icon)
+        
+        title = QLabel("Присоединяйтесь!")
+        title.setFont(QFont("Arial", 42, QFont.Bold))
+        title.setAlignment(Qt.AlignCenter)
+        left_layout.addWidget(title)
+        
+        subtitle = QLabel("Создайте аккаунт\nи записывайтесь онлайн")
+        subtitle.setFont(QFont("Arial", 18))
+        subtitle.setStyleSheet("color: rgba(255, 255, 255, 0.85);")
+        subtitle.setAlignment(Qt.AlignCenter)
+        left_layout.addWidget(subtitle)
+        
+        # Разделитель
+        left_layout.addSpacing(30)
+        
+        slogan = QLabel("✨ Станьте частью красоты ✨")
+        slogan.setFont(QFont("Arial", 14))
+        slogan.setStyleSheet("font-style: italic; color: rgba(255, 255, 255, 0.7);")
+        slogan.setAlignment(Qt.AlignCenter)
+        left_layout.addWidget(slogan)
+        
+        layout.addWidget(left_panel)
+        
+        # Правая панель
+        right_panel = QFrame()
+        right_panel.setStyleSheet(f"background-color: {Colors.WHITE};")
+        
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setAlignment(Qt.AlignCenter)
+        
+        form_container = QWidget()
+        form_container.setFixedWidth(400)
+        form_layout = QVBoxLayout(form_container)
+        form_layout.setSpacing(20)
+        
+        title_label = QLabel("Регистрация")
+        title_label.setFont(QFont("Arial", 32, QFont.Bold))
+        title_label.setStyleSheet(f"color: {Colors.PRIMARY}; margin-bottom: 20px;")
+        title_label.setAlignment(Qt.AlignCenter)
+        form_layout.addWidget(title_label)
+        
+        # Поля
+        name_label = QLabel("ФИО")
+        name_label.setFont(QFont("Arial", 12, QFont.Bold))
+        name_label.setStyleSheet(f"color: {Colors.PRIMARY};")
+        form_layout.addWidget(name_label)
+        
+        self.reg_name = ModernInput("Иванов Иван Иванович")
+        form_layout.addWidget(self.reg_name)
+        
+        phone_label = QLabel("Номер телефона")
+        phone_label.setFont(QFont("Arial", 12, QFont.Bold))
+        phone_label.setStyleSheet(f"color: {Colors.PRIMARY};")
+        form_layout.addWidget(phone_label)
+        
+        self.reg_phone = ModernInput("+7 (999) 123-45-67")
+        form_layout.addWidget(self.reg_phone)
+        
+        password_label = QLabel("Пароль")
+        password_label.setFont(QFont("Arial", 12, QFont.Bold))
+        password_label.setStyleSheet(f"color: {Colors.PRIMARY};")
+        form_layout.addWidget(password_label)
+        
+        self.reg_password = ModernInput("Придумайте пароль", password=True)
+        form_layout.addWidget(self.reg_password)
+        
+        # Кнопки
+        reg_btn = ModernButton("Зарегистрироваться", "primary")
+        reg_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #667EEA, stop:1 #764BA2);
+                color: white;
+                font-weight: bold;
+                font-size: 15px;
+                padding: 14px 28px;
+                border-radius: 12px;
+                border: none;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #5A67D8, stop:1 #6B46C1);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4C51BF, stop:1 #553C9A);
+            }
+        """)
+        reg_btn.clicked.connect(self.do_register)
+        form_layout.addWidget(reg_btn)
+        
+        back_btn = ModernButton("← Назад к входу", "secondary")
+        back_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {Colors.WHITE};
+                color: {Colors.PRIMARY};
+                font-weight: bold;
+                font-size: 14px;
+                padding: 12px 24px;
+                border-radius: 12px;
+                border: 2px solid {Colors.PRIMARY};
+            }}
+            QPushButton:hover {{
+                background-color: {Colors.PRIMARY_LIGHT};
+            }}
+        """)
+        back_btn.clicked.connect(self.show_login)
+        form_layout.addWidget(back_btn)
+        
+        right_layout.addWidget(form_container)
+        layout.addWidget(right_panel)
+        
+        return screen
     
     def do_login(self):
-        """Выполнить авторизацию"""
-        phone = self.phone_entry.get().strip()
-        password = self.password_entry.get()
+        """Выполнить вход"""
+        phone = self.login_phone.text().strip()
+        password = self.login_password.text()
         
         if not phone or not password:
-            messagebox.showwarning("Внимание", "Заполните все поля")
+            QMessageBox.warning(self, "Внимание", "Заполните все поля")
             return
         
         result = self.api.login(phone, password)
@@ -627,554 +895,591 @@ class BeautyProApp:
             else:
                 self.show_client_interface()
         else:
-            messagebox.showerror("Ошибка", result["error"])
+            QMessageBox.critical(self, "Ошибка", result["error"])
     
     def do_register(self):
         """Выполнить регистрацию"""
-        name = self.reg_name_entry.get().strip()
-        phone = self.reg_phone_entry.get().strip()
-        password = self.reg_password_entry.get()
+        name = self.reg_name.text().strip()
+        phone = self.reg_phone.text().strip()
+        password = self.reg_password.text()
         
         if not name or not phone or not password:
-            messagebox.showwarning("Внимание", "Заполните все поля")
+            QMessageBox.warning(self, "Внимание", "Заполните все поля")
             return
         
         result = self.api.register(phone, password, name)
         
         if result["success"]:
-            messagebox.showinfo("Успех", "Регистрация успешна! Теперь вы можете войти.")
-            self.show_login_screen()
+            QMessageBox.information(self, "Успех", "Регистрация успешна! Теперь вы можете войти.")
+            self.show_login()
         else:
-            messagebox.showerror("Ошибка", result["error"])
+            QMessageBox.critical(self, "Ошибка", result["error"])
     
     def logout(self):
         """Выйти из аккаунта"""
         self.current_user = None
         self.selected_master = None
         self.selected_service = None
-        self.show_login_screen()
+        self.login_phone.clear()
+        self.login_password.clear()
+        self.show_login()
     
     def show_client_interface(self):
         """Показать интерфейс клиента"""
-        self.clear_root()
+        if self.client_screen:
+            self.central_widget.removeWidget(self.client_screen)
+            self.client_screen.deleteLater()
         
-        header = tk.Frame(self.root, bg=self.colors['primary'], height=60)
-        header.pack(fill=tk.X)
-        header.pack_propagate(False)
-        
-        header_content = tk.Frame(header, bg=self.colors['primary'])
-        header_content.pack(fill=tk.BOTH, expand=True, padx=20)
-        
-        tk.Label(header_content, text=f"💇‍♀️ BeautyPro", font=("Arial", 16, "bold"),
-                bg=self.colors['primary'], fg=self.colors['white']).pack(side=tk.LEFT, pady=15)
-        
-        tk.Label(header_content, text=f"👤 {self.current_user['full_name'] or 'Клиент'}",
-                font=("Arial", 12), bg=self.colors['primary'], fg=self.colors['white']).pack(side=tk.LEFT, padx=30, pady=15)
-        
-        logout_btn = self.create_button(header_content, "  Выйти  ", self.logout,
-                                       bg=self.colors['white'], fg=self.colors['primary'],
-                                       font=("Arial", 10, "bold"), padx=12, pady=6)
-        logout_btn.pack(side=tk.RIGHT, pady=15)
-        
-        # Контейнер для notebook с белым фоном
-        notebook_container = tk.Frame(self.root, bg=self.colors['white'])
-        notebook_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        notebook = ttk.Notebook(notebook_container)
-        notebook.pack(fill=tk.BOTH, expand=True)
-        
-        # Используем tk.Frame вместо ttk.Frame для точного контроля цвета
-        booking_tab = tk.Frame(notebook, bg=self.colors['white'])
-        notebook.add(booking_tab, text="📝 Новая запись")
-        self.create_booking_tab(booking_tab)
-        
-        appointments_tab = tk.Frame(notebook, bg=self.colors['white'])
-        notebook.add(appointments_tab, text="📋 Мои записи")
-        self.create_appointments_tab(appointments_tab)
-        
-        history_tab = tk.Frame(notebook, bg=self.colors['white'])
-        notebook.add(history_tab, text="📜 История")
-        self.create_history_tab(history_tab)
+        self.client_screen = self.create_client_screen()
+        self.central_widget.addWidget(self.client_screen)
+        self.central_widget.setCurrentWidget(self.client_screen)
     
-    def create_booking_tab(self, parent):
+    def create_client_screen(self):
+        """Создать экран клиента"""
+        screen = QWidget()
+        layout = QVBoxLayout(screen)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Хедер с современным градиентом
+        header = QFrame()
+        header.setFixedHeight(72)
+        header.setStyleSheet(f"""
+            QFrame {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {Colors.PRIMARY_GRADIENT_START}, 
+                    stop:1 {Colors.PRIMARY_DARK});
+            }}
+            QLabel {{
+                color: white;
+                background: transparent;
+            }}
+        """)
+        
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(32, 0, 32, 0)
+        
+        # Логотип с иконкой
+        logo = QLabel("✦ BeautyPro")
+        logo.setFont(QFont("Arial", 20, QFont.Bold))
+        header_layout.addWidget(logo)
+        
+        header_layout.addSpacing(24)
+        
+        # Имя пользователя с иконкой
+        user_name = QLabel(f"👤  {self.current_user.get('full_name', 'Клиент')}")
+        user_name.setFont(QFont("Arial", 13))
+        user_name.setStyleSheet("color: rgba(255, 255, 255, 0.9);")
+        header_layout.addWidget(user_name)
+        
+        header_layout.addStretch()
+        
+        logout_btn = QPushButton("Выйти")
+        logout_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: rgba(255, 255, 255, 0.15);
+                color: white;
+                padding: 10px 24px;
+                border-radius: 10px;
+                font-weight: 600;
+                font-size: 13px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+            }}
+            QPushButton:hover {{
+                background-color: rgba(255, 255, 255, 0.25);
+                border-color: rgba(255, 255, 255, 0.4);
+            }}
+        """)
+        logout_btn.setCursor(Qt.PointingHandCursor)
+        logout_btn.clicked.connect(self.logout)
+        header_layout.addWidget(logout_btn)
+        
+        layout.addWidget(header)
+        
+        # Табы
+        self.client_tabs = QTabWidget()
+        self.client_tabs.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: none;
+                background-color: {Colors.BACKGROUND};
+                padding: 20px;
+            }}
+        """)
+        
+        # Вкладка записи
+        booking_tab = self.create_booking_tab()
+        self.client_tabs.addTab(booking_tab, "Новая запись")
+        
+        # Вкладка записей
+        appointments_tab = self.create_appointments_tab()
+        self.client_tabs.addTab(appointments_tab, "Мои записи")
+        
+        # История
+        history_tab = self.create_history_tab()
+        self.client_tabs.addTab(history_tab, "История")
+        
+        layout.addWidget(self.client_tabs)
+        
+        return screen
+    
+    def create_booking_tab(self):
         """Создать вкладку записи"""
-        main_container = tk.Frame(parent, bg=self.colors['white'])
-        main_container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        tab = QWidget()
+        tab.setStyleSheet(f"background-color: {Colors.BACKGROUND};")
         
-        header = tk.Frame(main_container, bg=self.colors['white'])
-        header.pack(fill=tk.X, pady=(0, 20))
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(20)
         
-        tk.Label(header, text="📝 Новая запись", font=("Arial", 20, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(side=tk.LEFT)
+        # Заголовок
+        title = QLabel("Новая запись")
+        title.setFont(QFont("Arial", 24, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.PRIMARY};")
+        layout.addWidget(title)
         
-        self.booking_container = tk.Frame(main_container, bg=self.colors['white'])
-        self.booking_container.pack(fill=tk.BOTH, expand=True)
+        # Стек для переключения между экранами
+        self.booking_stack = QStackedWidget()
+        layout.addWidget(self.booking_stack)
         
-        self.show_booking_choice()
+        # Экран выбора способа записи
+        choice_screen = self.create_booking_choice()
+        self.booking_stack.addWidget(choice_screen)
+        
+        return tab
     
-    def show_booking_choice(self):
-        """Показать выбор способа записи"""
-        for widget in self.booking_container.winfo_children():
-            widget.destroy()
+    def create_booking_choice(self):
+        """Создать экран выбора способа записи"""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setAlignment(Qt.AlignCenter)
         
-        self.selected_master = None
-        self.selected_service = None
-        
-        tk.Label(self.booking_container, text="Выберите способ записи:", font=("Arial", 14),
-                bg=self.colors['white'], fg=self.colors['text']).pack(pady=(20, 30))
-        
-        cards_frame = tk.Frame(self.booking_container, bg=self.colors['white'])
-        cards_frame.pack(pady=20)
+        cards_container = QWidget()
+        cards_layout = QHBoxLayout(cards_container)
+        cards_layout.setSpacing(30)
+        cards_layout.setAlignment(Qt.AlignCenter)
         
         # Карточка выбора мастера
-        master_card = tk.Frame(cards_frame, bg=self.colors['white'], 
-                              highlightbackground=self.colors['primary'], highlightthickness=2,
-                              padx=20, pady=15, cursor="hand2")
-        master_card.pack(side=tk.LEFT, padx=20)
+        master_card = Card(clickable=True)
+        master_card.setFixedSize(250, 200)
+        master_layout = QVBoxLayout(master_card)
+        master_layout.setAlignment(Qt.AlignCenter)
         
-        def on_master_click(e=None):
-            self.show_masters_list()
+        master_icon = QLabel("👨‍🎨")
+        master_icon.setFont(QFont("Arial", 48))
+        master_icon.setAlignment(Qt.AlignCenter)
+        master_icon.setStyleSheet("background: transparent; border: none;")
+        master_layout.addWidget(master_icon)
         
-        def on_master_enter(e=None):
-            master_card.config(bg=self.colors['light'])
-            for child in master_card.winfo_children():
-                child.config(bg=self.colors['light'])
+        master_title = QLabel("Выбрать мастера")
+        master_title.setFont(QFont("Arial", 14, QFont.Bold))
+        master_title.setStyleSheet(f"color: {Colors.PRIMARY}; background: transparent; border: none; text-decoration: none;")
+        master_title.setAlignment(Qt.AlignCenter)
+        master_layout.addWidget(master_title)
         
-        def on_master_leave(e=None):
-            master_card.config(bg=self.colors['white'])
-            for child in master_card.winfo_children():
-                child.config(bg=self.colors['white'])
+        master_desc = QLabel("Сначала выберите мастера,\nзатем услугу")
+        master_desc.setFont(QFont("Arial", 11))
+        master_desc.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
+        master_desc.setAlignment(Qt.AlignCenter)
+        master_layout.addWidget(master_desc)
         
-        master_card.bind('<Button-1>', on_master_click)
-        master_card.bind('<Enter>', on_master_enter)
-        master_card.bind('<Leave>', on_master_leave)
-        
-        lbl1 = tk.Label(master_card, text="👨‍🎨", font=("Arial", 50), bg=self.colors['white'], cursor="hand2")
-        lbl1.pack(pady=(10, 5))
-        lbl1.bind('<Button-1>', on_master_click)
-        
-        lbl2 = tk.Label(master_card, text="Выбрать мастера", font=("Arial", 14, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary'], cursor="hand2")
-        lbl2.pack()
-        lbl2.bind('<Button-1>', on_master_click)
-        
-        lbl3 = tk.Label(master_card, text="Сначала выберите мастера,\nзатем услугу", font=("Arial", 10),
-                bg=self.colors['white'], fg=self.colors['gray'], cursor="hand2")
-        lbl3.pack(pady=(5, 10))
-        lbl3.bind('<Button-1>', on_master_click)
+        master_card.clicked.connect(self.show_masters_list)
+        cards_layout.addWidget(master_card)
         
         # Карточка выбора услуги
-        service_card = tk.Frame(cards_frame, bg=self.colors['white'], 
-                               highlightbackground=self.colors['primary'], highlightthickness=2,
-                               padx=20, pady=15, cursor="hand2")
-        service_card.pack(side=tk.LEFT, padx=20)
+        service_card = Card(clickable=True)
+        service_card.setFixedSize(250, 200)
+        service_layout = QVBoxLayout(service_card)
+        service_layout.setAlignment(Qt.AlignCenter)
         
-        def on_service_click(e=None):
-            self.show_services_list()
+        service_icon = QLabel("✂️")
+        service_icon.setFont(QFont("Arial", 48))
+        service_icon.setAlignment(Qt.AlignCenter)
+        service_icon.setStyleSheet("background: transparent; border: none;")
+        service_layout.addWidget(service_icon)
         
-        def on_service_enter(e=None):
-            service_card.config(bg=self.colors['light'])
-            for child in service_card.winfo_children():
-                child.config(bg=self.colors['light'])
+        service_title = QLabel("Выбрать услугу")
+        service_title.setFont(QFont("Arial", 14, QFont.Bold))
+        service_title.setStyleSheet(f"color: {Colors.PRIMARY}; background: transparent; border: none; text-decoration: none;")
+        service_title.setAlignment(Qt.AlignCenter)
+        service_layout.addWidget(service_title)
         
-        def on_service_leave(e=None):
-            service_card.config(bg=self.colors['white'])
-            for child in service_card.winfo_children():
-                child.config(bg=self.colors['white'])
+        service_desc = QLabel("Сначала выберите услугу,\nзатем мастера")
+        service_desc.setFont(QFont("Arial", 11))
+        service_desc.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
+        service_desc.setAlignment(Qt.AlignCenter)
+        service_layout.addWidget(service_desc)
         
-        service_card.bind('<Button-1>', on_service_click)
-        service_card.bind('<Enter>', on_service_enter)
-        service_card.bind('<Leave>', on_service_leave)
+        service_card.clicked.connect(self.show_services_list)
+        cards_layout.addWidget(service_card)
         
-        lbl4 = tk.Label(service_card, text="✂️", font=("Arial", 50), bg=self.colors['white'], cursor="hand2")
-        lbl4.pack(pady=(10, 5))
-        lbl4.bind('<Button-1>', on_service_click)
+        layout.addWidget(cards_container)
         
-        lbl5 = tk.Label(service_card, text="Выбрать услугу", font=("Arial", 14, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary'], cursor="hand2")
-        lbl5.pack()
-        lbl5.bind('<Button-1>', on_service_click)
-        
-        lbl6 = tk.Label(service_card, text="Сначала выберите услугу,\nзатем мастера", font=("Arial", 10),
-                bg=self.colors['white'], fg=self.colors['gray'], cursor="hand2")
-        lbl6.pack(pady=(5, 10))
-        lbl6.bind('<Button-1>', on_service_click)
+        return widget
     
     def show_masters_list(self):
         """Показать список мастеров"""
-        for widget in self.booking_container.winfo_children():
-            widget.destroy()
+        # Удаляем ВСЕ виджеты кроме первого (choice screen)
+        while self.booking_stack.count() > 1:
+            old_widget = self.booking_stack.widget(1)
+            self.booking_stack.removeWidget(old_widget)
+            old_widget.deleteLater()
         
-        header = tk.Frame(self.booking_container, bg=self.colors['white'])
-        header.pack(fill=tk.X, pady=(0, 15))
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
         
-        back_btn = self.create_styled_button(header, "← Назад", self.show_booking_choice, 'secondary')
-        back_btn.pack(side=tk.LEFT)
+        # Заголовок с кнопкой назад
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
         
-        tk.Label(header, text="👨‍🎨 Выберите мастера", font=("Arial", 16, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(side=tk.LEFT, padx=20)
+        back_btn = ModernButton("← Назад", "secondary")
+        back_btn.setFixedWidth(140)
+        back_btn.clicked.connect(lambda: self.booking_stack.setCurrentIndex(0))
+        header_layout.addWidget(back_btn)
         
+        title = QLabel("Выберите мастера")
+        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.PRIMARY};")
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        
+        layout.addWidget(header)
+        
+        # Загружаем мастеров
         result = self.api.get_masters()
         
         if not result["success"]:
-            tk.Label(self.booking_container, text="Ошибка загрузки мастеров",
-                    font=("Arial", 12), bg=self.colors['white'], fg=self.colors['danger']).pack(pady=20)
-            return
-        
-        masters = result["data"]
-        
-        if not masters:
-            tk.Label(self.booking_container, text="Нет доступных мастеров",
-                    font=("Arial", 12), bg=self.colors['white'], fg=self.colors['gray']).pack(pady=20)
-            return
-        
-        canvas = tk.Canvas(self.booking_container, bg=self.colors['white'], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self.booking_container, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg=self.colors['white'])
-        
-        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Привязка скролла мышью
-        self.bind_mousewheel(canvas, scrollable_frame)
-        
-        # Сетка мастеров - 6 в ряд
-        cols = 6
-        for i, master in enumerate(masters):
-            row = i // cols
-            col = i % cols
+            error_label = QLabel("Ошибка загрузки мастеров")
+            error_label.setStyleSheet(f"color: {Colors.DANGER};")
+            layout.addWidget(error_label)
+        else:
+            masters = result["data"]
             
-            card = tk.Frame(scrollable_frame, bg=self.colors['white'], 
-                          highlightbackground=self.colors['primary'], highlightthickness=2,
-                          padx=8, pady=8, width=145, height=130)
-            card.grid(row=row, column=col, padx=5, pady=5, sticky='nsew')
-            card.grid_propagate(False)
-            card.bind('<Button-1>', lambda e, m=master: self.select_master(m))
-            card.bind('<Enter>', lambda e, c=card: c.config(bg=self.colors['light']))
-            card.bind('<Leave>', lambda e, c=card: c.config(bg=self.colors['white']))
-            
-            # Аватар
-            avatar = tk.Frame(card, bg=self.colors['white'], width=40, height=40,
-                            highlightbackground=self.colors['primary'], highlightthickness=1)
-            avatar.pack(pady=(0, 5))
-            avatar.pack_propagate(False)
-            avatar.bind('<Button-1>', lambda e, m=master: self.select_master(m))
-            tk.Label(avatar, text="👨‍🎨", font=("Arial", 16), bg=self.colors['white']).place(relx=0.5, rely=0.5, anchor='center')
-            
-            # Имя
-            name_label = tk.Label(card, text=master['full_name'], font=("Arial", 10, "bold"),
-                    bg=self.colors['white'], fg=self.colors['text'], wraplength=130)
-            name_label.pack()
-            name_label.bind('<Button-1>', lambda e, m=master: self.select_master(m))
-            
-            # Профессия
-            profession = master.get('profession', {}).get('name', '') if master.get('profession') else ''
-            prof_label = tk.Label(card, text=profession, font=("Arial", 9),
-                    bg=self.colors['white'], fg=self.colors['gray'])
-            prof_label.pack()
-            prof_label.bind('<Button-1>', lambda e, m=master: self.select_master(m))
-            
-            # Количество услуг
-            services_count = len(master.get('services', []))
-            services_label = tk.Label(card, text=f"✂️ {services_count} услуг", font=("Arial", 9),
-                    bg=self.colors['white'], fg=self.colors['primary'])
-            services_label.pack()
-            services_label.bind('<Button-1>', lambda e, m=master: self.select_master(m))
+            if not masters:
+                empty_label = QLabel("Нет доступных мастеров")
+                empty_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
+                layout.addWidget(empty_label)
+            else:
+                # Скролл-область
+                scroll = QScrollArea()
+                scroll.setWidgetResizable(True)
+                scroll.setStyleSheet("background-color: transparent;")
+                
+                scroll_content = QWidget()
+                grid = QGridLayout(scroll_content)
+                grid.setSpacing(8)
+                grid.setContentsMargins(5, 5, 5, 5)
+                
+                cols = 5
+                for i, master in enumerate(masters):
+                    row = i // cols
+                    col = i % cols
+                    
+                    card = Card(clickable=True, padding=10)
+                    card.setFixedSize(170, 150)
+                    card_layout = QVBoxLayout(card)
+                    card_layout.setAlignment(Qt.AlignCenter)
+                    
+                    card_layout.setSpacing(2)
+                    card_layout.setContentsMargins(5, 5, 5, 5)
+                    
+                    avatar = QLabel("👨‍🎨")
+                    avatar.setFont(QFont("Arial", 24))
+                    avatar.setAlignment(Qt.AlignCenter)
+                    card_layout.addWidget(avatar)
+                    
+                    name = QLabel(master['full_name'])
+                    name.setFont(QFont("Arial", 11, QFont.Bold))
+                    name.setWordWrap(True)
+                    name.setAlignment(Qt.AlignCenter)
+                    card_layout.addWidget(name)
+                    
+                    profession = master.get('profession', {}).get('name', '') if master.get('profession') else ''
+                    prof_label = QLabel(profession)
+                    prof_label.setFont(QFont("Arial", 9))
+                    prof_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
+                    prof_label.setAlignment(Qt.AlignCenter)
+                    card_layout.addWidget(prof_label)
+                    
+                    services_count = len(master.get('services', []))
+                    services_label = QLabel(f"{services_count} услуг")
+                    services_label.setFont(QFont("Arial", 9))
+                    services_label.setStyleSheet(f"color: {Colors.PRIMARY};")
+                    services_label.setAlignment(Qt.AlignCenter)
+                    card_layout.addWidget(services_label)
+                    
+                    card.clicked.connect(lambda m=master: self.select_master(m))
+                    grid.addWidget(card, row, col)
+                
+                scroll.setWidget(scroll_content)
+                layout.addWidget(scroll)
         
-        # Настройка колонок для равномерного распределения
-        for c in range(cols):
-            scrollable_frame.columnconfigure(c, weight=1)
-        
-        # Привязка скролла после создания всех элементов
-        self.bind_mousewheel(canvas, scrollable_frame)
+        self.booking_stack.addWidget(widget)
+        self.booking_stack.setCurrentIndex(1)
+    
+    def go_back_to_masters(self):
+        """Вернуться к списку мастеров"""
+        # Удаляем виджеты выше индекса 1
+        while self.booking_stack.count() > 2:
+            old_widget = self.booking_stack.widget(2)
+            self.booking_stack.removeWidget(old_widget)
+            old_widget.deleteLater()
+        self.booking_stack.setCurrentIndex(1)
+    
+    def go_back_to_services(self):
+        """Вернуться к списку услуг"""
+        # Удаляем виджеты выше индекса 1
+        while self.booking_stack.count() > 2:
+            old_widget = self.booking_stack.widget(2)
+            self.booking_stack.removeWidget(old_widget)
+            old_widget.deleteLater()
+        self.booking_stack.setCurrentIndex(1)
     
     def select_master(self, master):
-        """Выбрать мастера"""
+        """Выбрать мастера и показать его услуги"""
         self.selected_master = master
         self.show_master_services()
     
     def show_master_services(self):
-        """Показать услуги выбранного мастера"""
-        for widget in self.booking_container.winfo_children():
-            widget.destroy()
+        """Показать услуги мастера"""
+        if self.booking_stack.count() > 2:
+            old_widget = self.booking_stack.widget(2)
+            self.booking_stack.removeWidget(old_widget)
+            old_widget.deleteLater()
         
-        header = tk.Frame(self.booking_container, bg=self.colors['white'])
-        header.pack(fill=tk.X, pady=(0, 15))
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
         
-        back_btn = self.create_styled_button(header, "← Назад", self.show_masters_list, 'secondary')
-        back_btn.pack(side=tk.LEFT)
+        # Заголовок
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
         
-        tk.Label(header, text=f"✂️ Услуги мастера: {self.selected_master['full_name']}", font=("Arial", 16, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(side=tk.LEFT, padx=20)
+        back_btn = ModernButton("← Назад", "secondary")
+        back_btn.setFixedWidth(140)
+        back_btn.clicked.connect(self.go_back_to_masters)
+        header_layout.addWidget(back_btn)
         
-        master_info = tk.Frame(self.booking_container, bg=self.colors['white'], padx=15, pady=10,
-                              highlightbackground=self.colors['primary'], highlightthickness=1)
-        master_info.pack(fill=tk.X, pady=(0, 15))
+        title = QLabel(f"Услуги: {self.selected_master['full_name']}")
+        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.PRIMARY};")
+        header_layout.addWidget(title)
+        header_layout.addStretch()
         
-        tk.Label(master_info, text=f"👨‍🎨 {self.selected_master['full_name']}",
-                font=("Arial", 12, "bold"), bg=self.colors['white'], fg=self.colors['text']).pack(side=tk.LEFT)
+        layout.addWidget(header)
         
         services = self.selected_master.get('services', [])
         
         if not services:
-            tk.Label(self.booking_container, text="У мастера нет доступных услуг",
-                    font=("Arial", 12), bg=self.colors['white'], fg=self.colors['gray']).pack(pady=20)
-            return
+            empty_label = QLabel("У мастера нет доступных услуг")
+            empty_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
+            layout.addWidget(empty_label)
+        else:
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setStyleSheet("background-color: transparent;")
+            
+            scroll_content = QWidget()
+            services_layout = QVBoxLayout(scroll_content)
+            services_layout.setSpacing(6)
+            services_layout.setContentsMargins(10, 10, 10, 10)
+            services_layout.setAlignment(Qt.AlignTop)
+            
+            for service in services:
+                card = Card(clickable=True, padding=10)
+                card.setFixedHeight(60)
+                card.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+                card_layout = QHBoxLayout(card)
+                card_layout.setContentsMargins(10, 5, 10, 5)
+                
+                info = QWidget()
+                info_layout = QVBoxLayout(info)
+                info_layout.setContentsMargins(0, 0, 0, 0)
+                info_layout.setSpacing(4)
+                
+                name = QLabel(service['name'])
+                name.setFont(QFont("Arial", 13, QFont.Bold))
+                info_layout.addWidget(name)
+                
+                details = QLabel(f"{service['price']} руб. • {service['duration_minutes']} мин.")
+                details.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; font-size: 12px;")
+                info_layout.addWidget(details)
+                
+                card_layout.addWidget(info)
+                card_layout.addStretch()
+                
+                card.clicked.connect(lambda s=service: self.select_service_and_show_calendar(s))
+                services_layout.addWidget(card)
+            
+            services_layout.addStretch()
+            scroll.setWidget(scroll_content)
+            layout.addWidget(scroll)
         
-        canvas = tk.Canvas(self.booking_container, bg=self.colors['white'], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self.booking_container, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg=self.colors['white'])
-        
-        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Привязка скролла мышью
-        self.bind_mousewheel(canvas, scrollable_frame)
-        
-        for service in services:
-            card = tk.Frame(scrollable_frame, bg=self.colors['white'], 
-                          highlightbackground=self.colors['primary'], highlightthickness=2,
-                          padx=15, pady=10, cursor="hand2")
-            card.pack(fill=tk.X, pady=5, padx=5)
-            
-            def make_click_handler(s):
-                return lambda e: self.select_service_and_show_calendar(s)
-            
-            def make_enter_handler(c):
-                return lambda e: c.config(bg=self.colors['light'])
-            
-            def make_leave_handler(c):
-                return lambda e: c.config(bg=self.colors['white'])
-            
-            click_handler = make_click_handler(service)
-            card.bind('<Button-1>', click_handler)
-            card.bind('<Enter>', make_enter_handler(card))
-            card.bind('<Leave>', make_leave_handler(card))
-            
-            # Название услуги
-            name_lbl = tk.Label(card, text=f"✂️ {service['name']}", font=("Arial", 12, "bold"),
-                    bg=self.colors['white'], fg=self.colors['text'], cursor="hand2")
-            name_lbl.pack(anchor=tk.W)
-            name_lbl.bind('<Button-1>', click_handler)
-            
-            # Детали (цена и время)
-            details = tk.Frame(card, bg=self.colors['white'], cursor="hand2")
-            details.pack(anchor=tk.W)
-            details.bind('<Button-1>', click_handler)
-            
-            price_lbl = tk.Label(details, text=f"💰 {service['price']} руб.", font=("Arial", 10),
-                    bg=self.colors['white'], fg=self.colors['gray'], cursor="hand2")
-            price_lbl.pack(side=tk.LEFT)
-            price_lbl.bind('<Button-1>', click_handler)
-            
-            time_lbl = tk.Label(details, text=f"  •  ⏱️ {service['duration_minutes']} мин.", font=("Arial", 10),
-                    bg=self.colors['white'], fg=self.colors['gray'], cursor="hand2")
-            time_lbl.pack(side=tk.LEFT)
-            time_lbl.bind('<Button-1>', click_handler)
-        
-        # Привязка скролла после создания всех элементов
-        self.bind_mousewheel(canvas, scrollable_frame)
+        self.booking_stack.addWidget(widget)
+        self.booking_stack.setCurrentIndex(2)
     
     def show_services_list(self):
         """Показать список услуг"""
-        for widget in self.booking_container.winfo_children():
-            widget.destroy()
+        # Удаляем ВСЕ виджеты кроме первого (choice screen)
+        while self.booking_stack.count() > 1:
+            old_widget = self.booking_stack.widget(1)
+            self.booking_stack.removeWidget(old_widget)
+            old_widget.deleteLater()
         
-        header = tk.Frame(self.booking_container, bg=self.colors['white'])
-        header.pack(fill=tk.X, pady=(0, 15))
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
         
-        back_btn = self.create_styled_button(header, "← Назад", self.show_booking_choice, 'secondary')
-        back_btn.pack(side=tk.LEFT)
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
         
-        tk.Label(header, text="✂️ Выберите услугу", font=("Arial", 16, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(side=tk.LEFT, padx=20)
+        back_btn = ModernButton("← Назад", "secondary")
+        back_btn.setFixedWidth(140)
+        back_btn.clicked.connect(lambda: self.booking_stack.setCurrentIndex(0))
+        header_layout.addWidget(back_btn)
+        
+        title = QLabel("Выберите услугу")
+        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.PRIMARY};")
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+        
+        layout.addWidget(header)
         
         result = self.api.get_services()
         
         if not result["success"]:
-            tk.Label(self.booking_container, text="Ошибка загрузки услуг",
-                    font=("Arial", 12), bg=self.colors['white'], fg=self.colors['danger']).pack(pady=20)
-            return
+            error_label = QLabel("Ошибка загрузки услуг")
+            error_label.setStyleSheet(f"color: {Colors.DANGER};")
+            layout.addWidget(error_label)
+        else:
+            services = result["data"]
+            
+            if not services:
+                empty_label = QLabel("Нет доступных услуг")
+                empty_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
+                layout.addWidget(empty_label)
+            else:
+                scroll = QScrollArea()
+                scroll.setWidgetResizable(True)
+                scroll.setStyleSheet("background-color: transparent;")
+                
+                scroll_content = QWidget()
+                grid = QGridLayout(scroll_content)
+                grid.setSpacing(15)
+                
+                cols = 3
+                for i, service in enumerate(services):
+                    row = i // cols
+                    col = i % cols
+                    
+                    card = Card(clickable=True)
+                    card.setMinimumHeight(120)
+                    card_layout = QVBoxLayout(card)
+                    
+                    name = QLabel(service['name'])
+                    name.setFont(QFont("Arial", 13, QFont.Bold))
+                    name.setWordWrap(True)
+                    card_layout.addWidget(name)
+                    
+                    details = QLabel(f"{service['price']} руб. • {service['duration_minutes']} мин.")
+                    details.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
+                    card_layout.addWidget(details)
+                    
+                    card.clicked.connect(lambda s=service: self.select_service_and_show_service_masters(s))
+                    grid.addWidget(card, row, col)
+                
+                scroll.setWidget(scroll_content)
+                layout.addWidget(scroll)
         
-        services = result["data"]
-        
-        canvas = tk.Canvas(self.booking_container, bg=self.colors['white'], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self.booking_container, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg=self.colors['white'])
-        
-        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Привязка скролла мышью
-        self.bind_mousewheel(canvas, scrollable_frame)
-        
-        # Сетка услуг - 3 в ряд
-        cols = 3
-        for i, service in enumerate(services):
-            row = i // cols
-            col = i % cols
-            
-            card = tk.Frame(scrollable_frame, bg=self.colors['white'], 
-                          highlightbackground=self.colors['primary'], highlightthickness=2,
-                          padx=12, pady=10, cursor="hand2", width=280, height=100)
-            card.grid(row=row, column=col, padx=8, pady=8, sticky='nsew')
-            card.grid_propagate(False)
-            
-            def make_click_handler(s):
-                return lambda e: self.select_service(s)
-            
-            def make_enter_handler(c):
-                return lambda e: c.config(bg=self.colors['light'])
-            
-            def make_leave_handler(c):
-                return lambda e: c.config(bg=self.colors['white'])
-            
-            click_handler = make_click_handler(service)
-            card.bind('<Button-1>', click_handler)
-            card.bind('<Enter>', make_enter_handler(card))
-            card.bind('<Leave>', make_leave_handler(card))
-            
-            # Название услуги
-            name_lbl = tk.Label(card, text=f"✂️ {service['name']}", font=("Arial", 11, "bold"),
-                    bg=self.colors['white'], fg=self.colors['text'], cursor="hand2", wraplength=250)
-            name_lbl.pack(anchor=tk.W)
-            name_lbl.bind('<Button-1>', click_handler)
-            
-            # Профессия
-            profession = service.get('profession', {}).get('name', '') if service.get('profession') else ''
-            prof_lbl = tk.Label(card, text=profession, font=("Arial", 9),
-                    bg=self.colors['white'], fg=self.colors['gray'], cursor="hand2")
-            prof_lbl.pack(anchor=tk.W)
-            prof_lbl.bind('<Button-1>', click_handler)
-            
-            # Детали (цена и время)
-            details = tk.Frame(card, bg=self.colors['white'], cursor="hand2")
-            details.pack(anchor=tk.W, pady=(5, 0))
-            details.bind('<Button-1>', click_handler)
-            
-            price_lbl = tk.Label(details, text=f"💰 {service['price']} руб.", font=("Arial", 9),
-                    bg=self.colors['white'], fg=self.colors['gray'], cursor="hand2")
-            price_lbl.pack(side=tk.LEFT)
-            price_lbl.bind('<Button-1>', click_handler)
-            
-            time_lbl = tk.Label(details, text=f"  •  ⏱️ {service['duration_minutes']} мин.", font=("Arial", 9),
-                    bg=self.colors['white'], fg=self.colors['gray'], cursor="hand2")
-            time_lbl.pack(side=tk.LEFT)
-            time_lbl.bind('<Button-1>', click_handler)
-        
-        # Привязка скролла после создания всех элементов
-        self.bind_mousewheel(canvas, scrollable_frame)
+        self.booking_stack.addWidget(widget)
+        self.booking_stack.setCurrentIndex(1)
     
-    def select_service(self, service):
+    def select_service_and_show_service_masters(self, service):
         """Выбрать услугу и показать мастеров"""
         self.selected_service = service
         self.show_service_masters()
     
     def show_service_masters(self):
-        """Показать мастеров для выбранной услуги"""
-        for widget in self.booking_container.winfo_children():
-            widget.destroy()
+        """Показать мастеров для услуги"""
+        if self.booking_stack.count() > 2:
+            old_widget = self.booking_stack.widget(2)
+            self.booking_stack.removeWidget(old_widget)
+            old_widget.deleteLater()
         
-        header = tk.Frame(self.booking_container, bg=self.colors['white'])
-        header.pack(fill=tk.X, pady=(0, 15))
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
         
-        back_btn = self.create_styled_button(header, "← Назад", self.show_services_list, 'secondary')
-        back_btn.pack(side=tk.LEFT)
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
         
-        tk.Label(header, text=f"👨‍🎨 Мастера для: {self.selected_service['name']}", font=("Arial", 16, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(side=tk.LEFT, padx=20)
+        back_btn = ModernButton("← Назад", "secondary")
+        back_btn.setFixedWidth(140)
+        back_btn.clicked.connect(self.go_back_to_services)
+        header_layout.addWidget(back_btn)
         
-        service_info = tk.Frame(self.booking_container, bg=self.colors['white'], padx=15, pady=10,
-                               highlightbackground=self.colors['primary'], highlightthickness=1)
-        service_info.pack(fill=tk.X, pady=(0, 15))
+        title = QLabel(f"Мастера для: {self.selected_service['name']}")
+        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.PRIMARY};")
+        header_layout.addWidget(title)
+        header_layout.addStretch()
         
-        tk.Label(service_info, text=f"✂️ {self.selected_service['name']}",
-                font=("Arial", 12, "bold"), bg=self.colors['white'], fg=self.colors['text']).pack(side=tk.LEFT)
-        tk.Label(service_info, text=f"💰 {self.selected_service['price']} руб.",
-                font=("Arial", 11), bg=self.colors['white'], fg=self.colors['primary']).pack(side=tk.RIGHT)
+        layout.addWidget(header)
         
         result = self.api.get_service_masters(self.selected_service['id'])
         
         if not result["success"]:
-            tk.Label(self.booking_container, text="Ошибка загрузки мастеров",
-                    font=("Arial", 12), bg=self.colors['white'], fg=self.colors['danger']).pack(pady=20)
-            return
-        
-        masters = result["data"]
-        
-        if not masters:
-            tk.Label(self.booking_container, text="Нет доступных мастеров для этой услуги",
-                    font=("Arial", 12), bg=self.colors['white'], fg=self.colors['gray']).pack(pady=20)
-            return
-        
-        canvas = tk.Canvas(self.booking_container, bg=self.colors['white'], highlightthickness=0)
-        scrollbar = ttk.Scrollbar(self.booking_container, orient="vertical", command=canvas.yview)
-        scrollable_frame = tk.Frame(canvas, bg=self.colors['white'])
-        
-        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Привязка скролла мышью
-        self.bind_mousewheel(canvas, scrollable_frame)
-        
-        # Сетка мастеров - 6 в ряд
-        cols = 6
-        for i, master in enumerate(masters):
-            row = i // cols
-            col = i % cols
+            error_label = QLabel("Ошибка загрузки мастеров")
+            error_label.setStyleSheet(f"color: {Colors.DANGER};")
+            layout.addWidget(error_label)
+        else:
+            masters = result["data"]
             
-            card = tk.Frame(scrollable_frame, bg=self.colors['white'], 
-                          highlightbackground=self.colors['primary'], highlightthickness=2,
-                          padx=8, pady=8, width=145, height=110)
-            card.grid(row=row, column=col, padx=5, pady=5, sticky='nsew')
-            card.grid_propagate(False)
-            card.bind('<Button-1>', lambda e, m=master: self.select_master_and_show_calendar(m))
-            card.bind('<Enter>', lambda e, c=card: c.config(bg=self.colors['light']))
-            card.bind('<Leave>', lambda e, c=card: c.config(bg=self.colors['white']))
-            
-            # Аватар
-            avatar = tk.Frame(card, bg=self.colors['white'], width=35, height=35,
-                            highlightbackground=self.colors['primary'], highlightthickness=1)
-            avatar.pack(pady=(0, 3))
-            avatar.pack_propagate(False)
-            avatar.bind('<Button-1>', lambda e, m=master: self.select_master_and_show_calendar(m))
-            tk.Label(avatar, text="👨‍🎨", font=("Arial", 14), bg=self.colors['white']).place(relx=0.5, rely=0.5, anchor='center')
-            
-            # Имя
-            name_label = tk.Label(card, text=master['full_name'], font=("Arial", 9, "bold"),
-                    bg=self.colors['white'], fg=self.colors['text'], wraplength=130)
-            name_label.pack()
-            name_label.bind('<Button-1>', lambda e, m=master: self.select_master_and_show_calendar(m))
-            
-            # Профессия
-            profession = master.get('profession', {}).get('name', '') if master.get('profession') else ''
-            prof_label = tk.Label(card, text=profession, font=("Arial", 9),
-                    bg=self.colors['white'], fg=self.colors['gray'])
-            prof_label.pack()
-            prof_label.bind('<Button-1>', lambda e, m=master: self.select_master_and_show_calendar(m))
+            if not masters:
+                empty_label = QLabel("Нет доступных мастеров для этой услуги")
+                empty_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
+                layout.addWidget(empty_label)
+            else:
+                scroll = QScrollArea()
+                scroll.setWidgetResizable(True)
+                scroll.setStyleSheet("background-color: transparent;")
+                
+                scroll_content = QWidget()
+                grid = QGridLayout(scroll_content)
+                grid.setSpacing(8)
+                grid.setContentsMargins(5, 5, 5, 5)
+                
+                cols = 5
+                for i, master in enumerate(masters):
+                    row = i // cols
+                    col = i % cols
+                    
+                    card = Card(clickable=True, padding=10)
+                    card.setFixedSize(170, 120)
+                    card_layout = QVBoxLayout(card)
+                    card_layout.setAlignment(Qt.AlignCenter)
+                    card_layout.setSpacing(2)
+                    card_layout.setContentsMargins(5, 5, 5, 5)
+                    
+                    avatar = QLabel("👨‍🎨")
+                    avatar.setFont(QFont("Arial", 24))
+                    avatar.setAlignment(Qt.AlignCenter)
+                    card_layout.addWidget(avatar)
+                    
+                    name = QLabel(master['full_name'])
+                    name.setFont(QFont("Arial", 11, QFont.Bold))
+                    name.setWordWrap(True)
+                    name.setAlignment(Qt.AlignCenter)
+                    card_layout.addWidget(name)
+                    
+                    card.clicked.connect(lambda m=master: self.select_master_and_show_calendar(m))
+                    grid.addWidget(card, row, col)
+                
+                scroll.setWidget(scroll_content)
+                layout.addWidget(scroll)
         
-        # Настройка колонок для равномерного распределения
-        for c in range(cols):
-            scrollable_frame.columnconfigure(c, weight=1)
-        
-        # Привязка скролла после создания всех элементов
-        self.bind_mousewheel(canvas, scrollable_frame)
+        self.booking_stack.addWidget(widget)
+        self.booking_stack.setCurrentIndex(2)
     
     def select_master_and_show_calendar(self, master):
         """Выбрать мастера и показать календарь"""
@@ -1188,92 +1493,207 @@ class BeautyProApp:
     
     def show_date_time_picker(self):
         """Показать выбор даты и времени"""
-        for widget in self.booking_container.winfo_children():
-            widget.destroy()
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Выбор даты и времени")
+        dialog.setFixedSize(850, 580)
+        dialog.setStyleSheet(f"""
+            QDialog {{
+                background-color: {Colors.WHITE};
+            }}
+            QCalendarWidget {{
+                background-color: {Colors.WHITE};
+            }}
+            QCalendarWidget QToolButton {{
+                color: {Colors.TEXT};
+                background-color: transparent;
+                border: none;
+                border-radius: 4px;
+                padding: 8px;
+                font-weight: bold;
+                font-size: 14px;
+            }}
+            QCalendarWidget QToolButton:hover {{
+                background-color: {Colors.PRIMARY_LIGHT};
+            }}
+            QCalendarWidget QToolButton:pressed {{
+                background-color: {Colors.HOVER};
+            }}
+            QCalendarWidget QMenu {{
+                background-color: {Colors.WHITE};
+                border: 1px solid {Colors.BORDER};
+            }}
+            QCalendarWidget QSpinBox {{
+                background-color: {Colors.WHITE};
+                border: 1px solid {Colors.BORDER};
+                border-radius: 4px;
+                padding: 4px;
+            }}
+            QCalendarWidget QWidget#qt_calendar_navigationbar {{
+                background-color: {Colors.WHITE};
+            }}
+            QCalendarWidget QTableView {{
+                background-color: {Colors.WHITE};
+                selection-background-color: {Colors.PRIMARY};
+                selection-color: white;
+            }}
+            QCalendarWidget QTableView::item {{
+                padding: 8px;
+            }}
+            QCalendarWidget QTableView::item:selected {{
+                background-color: {Colors.PRIMARY};
+                color: white;
+            }}
+            QCalendarWidget QAbstractItemView:enabled {{
+                background-color: {Colors.WHITE};
+                color: {Colors.TEXT};
+                selection-background-color: {Colors.PRIMARY};
+                selection-color: white;
+                outline: none;
+            }}
+            QCalendarWidget QAbstractItemView:disabled {{
+                color: {Colors.TEXT_MUTED};
+            }}
+            QCalendarWidget QWidget {{
+                alternate-background-color: {Colors.WHITE};
+                background-color: {Colors.WHITE};
+            }}
+            QCalendarWidget #qt_calendar_calendarview {{
+                background-color: {Colors.WHITE};
+            }}
+        """)
         
-        header = tk.Frame(self.booking_container, bg=self.colors['white'])
-        header.pack(fill=tk.X, pady=(0, 15))
+        layout = QHBoxLayout(dialog)
+        layout.setSpacing(24)
+        layout.setContentsMargins(24, 24, 24, 24)
         
-        back_btn = self.create_styled_button(header, "← Назад", self.show_booking_choice, 'secondary')
-        back_btn.pack(side=tk.LEFT)
+        # Левая часть - информация и календарь
+        left = QWidget()
+        left_layout = QVBoxLayout(left)
+        left_layout.setSpacing(16)
         
-        tk.Label(header, text="📅 Выберите дату и время", font=("Arial", 16, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(side=tk.LEFT, padx=20)
+        # Информация о записи
+        info_card = Card(padding=16)
+        info_layout = QVBoxLayout(info_card)
+        info_layout.setSpacing(8)
         
-        details_frame = tk.Frame(self.booking_container, bg=self.colors['white'], padx=15, pady=15,
-                               highlightbackground=self.colors['primary'], highlightthickness=1)
-        details_frame.pack(fill=tk.X, pady=(0, 20))
+        master_label = QLabel(f"👨‍🎨  Мастер: {self.selected_master['full_name']}")
+        master_label.setFont(QFont("Arial", 13, QFont.Bold))
+        master_label.setStyleSheet("background: transparent; border: none;")
+        info_layout.addWidget(master_label)
         
-        tk.Label(details_frame, text=f"👨‍🎨 {self.selected_master['full_name']}", font=("Arial", 11),
-                bg=self.colors['white'], fg=self.colors['text']).pack(anchor=tk.W)
-        tk.Label(details_frame, text=f"✂️ {self.selected_service['name']}", font=("Arial", 11),
-                bg=self.colors['white'], fg=self.colors['text']).pack(anchor=tk.W)
-        tk.Label(details_frame, text=f"💰 {self.selected_service['price']} руб.  •  ⏱️ {self.selected_service['duration_minutes']} мин.",
-                font=("Arial", 10), bg=self.colors['white'], fg=self.colors['gray']).pack(anchor=tk.W)
+        service_label = QLabel(f"✂️  Услуга: {self.selected_service['name']}")
+        service_label.setFont(QFont("Arial", 13))
+        service_label.setStyleSheet("background: transparent; border: none;")
+        info_layout.addWidget(service_label)
         
-        content_frame = tk.Frame(self.booking_container, bg=self.colors['white'])
-        content_frame.pack(fill=tk.BOTH, expand=True)
+        price_label = QLabel(f"💰  Стоимость: {self.selected_service['price']} руб.")
+        price_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; background: transparent; border: none;")
+        price_label.setFont(QFont("Arial", 12))
+        info_layout.addWidget(price_label)
         
-        left_frame = tk.Frame(content_frame, bg=self.colors['white'])
-        left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 20))
+        left_layout.addWidget(info_card)
         
-        tk.Label(left_frame, text="📅 Выберите дату:", font=("Arial", 12, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W, pady=(0, 10))
+        # Календарь
+        calendar_label = QLabel("📅  Выберите дату:")
+        calendar_label.setFont(QFont("Arial", 14, QFont.Bold))
+        calendar_label.setStyleSheet("background: transparent; border: none;")
+        left_layout.addWidget(calendar_label)
         
-        # Используем Calendar вместо DateEntry для стабильной работы на macOS
-        cal_frame = tk.Frame(left_frame, bg=self.colors['primary'], padx=2, pady=2)
-        cal_frame.pack(pady=(0, 20))
+        self.dialog_ref = dialog  # Сохраняем ссылку на диалог
         
-        self.date_picker = Calendar(cal_frame, selectmode='day', 
-                                   font=("Arial", 10),
-                                   background=self.colors['white'],
-                                   foreground=self.colors['text'],
-                                   headersbackground=self.colors['primary'],
-                                   headersforeground='white',
-                                   selectbackground=self.colors['primary'],
-                                   selectforeground='white',
-                                   normalbackground='white',
-                                   normalforeground=self.colors['text'],
-                                   weekendbackground='white',
-                                   weekendforeground=self.colors['primary'],
-                                   othermonthbackground='#f0f0f0',
-                                   othermonthforeground='#999999',
-                                   othermonthwebackground='#f0f0f0',
-                                   othermonthweforeground='#999999',
-                                   borderwidth=0,
-                                   showothermonthdays=True,
-                                   mindate=date.today(), 
-                                   maxdate=date.today() + timedelta(days=365))
-        self.date_picker.pack()
+        self.calendar = QCalendarWidget()
+        self.calendar.setMinimumDate(QDate.currentDate())
+        self.calendar.setMaximumDate(QDate.currentDate().addMonths(2))
+        self.calendar.setGridVisible(True)
+        self.calendar.setVerticalHeaderFormat(QCalendarWidget.NoVerticalHeader)
+        self.calendar.setHorizontalHeaderFormat(QCalendarWidget.ShortDayNames)
         
-        # Настраиваем кнопки навигации
-        for child in cal_frame.winfo_children():
-            if hasattr(child, 'winfo_children'):
-                for subchild in child.winfo_children():
-                    if isinstance(subchild, tk.Button):
-                        subchild.config(bg=self.colors['primary'], fg='white', 
-                                       activebackground=self.colors['primary_dark'],
-                                       relief='flat', cursor='hand2')
+        # Убираем выпадающий список месяца - только стрелки
+        # Находим и скрываем combobox месяца
+        for child in self.calendar.findChildren(QComboBox):
+            child.setVisible(False)
         
-        self.date_picker.bind("<<CalendarSelected>>", lambda e: self.load_time_slots())
+        # Устанавливаем фиксированный размер для корректного отображения всех дней
+        self.calendar.setFixedSize(450, 320)
         
-        right_frame = tk.Frame(content_frame, bg=self.colors['white'])
-        right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Подключаем сигнал selectionChanged вместо clicked для лучшей работы
+        self.calendar.selectionChanged.connect(self.on_calendar_date_changed)
         
-        tk.Label(right_frame, text="⏰ Доступное время:", font=("Arial", 12, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W, pady=(0, 10))
+        left_layout.addWidget(self.calendar)
         
-        self.slots_container = tk.Frame(right_frame, bg=self.colors['white'])
-        self.slots_container.pack(fill=tk.BOTH, expand=True)
+        layout.addWidget(left)
         
-        self.load_time_slots()
+        # Правая часть - время
+        right = QWidget()
+        right.setMinimumWidth(280)
+        right_layout = QVBoxLayout(right)
+        right_layout.setSpacing(16)
+        
+        time_label = QLabel("🕐  Доступное время:")
+        time_label.setFont(QFont("Arial", 14, QFont.Bold))
+        time_label.setStyleSheet("background: transparent; border: none;")
+        right_layout.addWidget(time_label)
+        
+        self.time_scroll = QScrollArea()
+        self.time_scroll.setWidgetResizable(True)
+        self.time_scroll.setStyleSheet(f"""
+            QScrollArea {{
+                border: 1px solid {Colors.BORDER};
+                border-radius: 12px;
+                background-color: {Colors.BACKGROUND};
+            }}
+        """)
+        self.time_container = QWidget()
+        self.time_container.setStyleSheet(f"background-color: {Colors.BACKGROUND};")
+        self.time_layout = QVBoxLayout(self.time_container)
+        self.time_layout.setSpacing(8)
+        self.time_layout.setContentsMargins(12, 12, 12, 12)
+        self.time_scroll.setWidget(self.time_container)
+        right_layout.addWidget(self.time_scroll)
+        
+        # Кнопки
+        buttons = QWidget()
+        buttons_layout = QHBoxLayout(buttons)
+        buttons_layout.setContentsMargins(0, 8, 0, 0)
+        
+        cancel_btn = ModernButton("Отмена", "secondary")
+        cancel_btn.clicked.connect(dialog.reject)
+        buttons_layout.addWidget(cancel_btn)
+        
+        right_layout.addWidget(buttons)
+        
+        layout.addWidget(right)
+        
+        # Загружаем слоты для выбранной даты
+        self.selected_slot = None
+        self.load_time_slots(dialog)
+        
+        result = dialog.exec()
+        
+        # Если диалог закрыт без записи - очищаем стек
+        if result == QDialog.Rejected:
+            while self.booking_stack.count() > 1:
+                widget = self.booking_stack.widget(1)
+                self.booking_stack.removeWidget(widget)
+                widget.deleteLater()
+            self.booking_stack.setCurrentIndex(0)
+            self.selected_master = None
+            self.selected_service = None
     
-    def load_time_slots(self):
-        """Загрузить доступные временные слоты"""
-        for widget in self.slots_container.winfo_children():
-            widget.destroy()
+    def on_calendar_date_changed(self):
+        """Обработчик изменения даты в календаре"""
+        if hasattr(self, 'dialog_ref') and self.dialog_ref:
+            self.load_time_slots(self.dialog_ref)
+    
+    def load_time_slots(self, dialog):
+        """Загрузить временные слоты"""
+        # Очищаем предыдущие слоты
+        while self.time_layout.count():
+            item = self.time_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
         
-        selected_date = self.date_picker.selection_get()
+        selected_date = self.calendar.selectedDate().toPython()
         
         result = self.api.get_available_slots(
             self.selected_master['id'],
@@ -1282,1137 +1702,1333 @@ class BeautyProApp:
         )
         
         if not result["success"]:
-            tk.Label(self.slots_container, text="Ошибка загрузки слотов",
-                    font=("Arial", 12), bg=self.colors['white'], fg=self.colors['danger']).pack(pady=20)
+            error_label = QLabel("Ошибка загрузки")
+            error_label.setStyleSheet(f"color: {Colors.DANGER};")
+            self.time_layout.addWidget(error_label)
             return
         
-        slots = result["data"].get("slots", [])
+        data = result["data"]
+        
+        # Обрабатываем разные форматы ответа API
+        # Может быть: список ["10:00", "11:00"] или dict {"date": "...", "slots": [...]}
+        if isinstance(data, dict):
+            slots = data.get('slots', [])
+        elif isinstance(data, list):
+            slots = data
+        else:
+            slots = []
         
         if not slots:
-            tk.Label(self.slots_container, text="Нет доступного времени на эту дату",
-                    font=("Arial", 12), bg=self.colors['white'], fg=self.colors['gray']).pack(pady=20)
+            empty_label = QLabel("Нет доступного времени на эту дату")
+            empty_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; font-size: 14px;")
+            empty_label.setAlignment(Qt.AlignCenter)
+            self.time_layout.addWidget(empty_label)
             return
         
-        slots_grid = tk.Frame(self.slots_container, bg=self.colors['white'])
-        slots_grid.pack(fill=tk.BOTH, expand=True)
+        for slot in slots:
+            # slot может быть строкой "10:00" или dict {'time': '10:00'}
+            if isinstance(slot, dict):
+                time_str = slot.get('time', str(slot))
+            else:
+                time_str = str(slot)
+            
+            btn = ModernButton(f"🕐  {time_str}", "secondary")
+            btn.clicked.connect(lambda checked, s=time_str: self.select_slot_and_confirm(s, dialog))
+            self.time_layout.addWidget(btn)
         
-        for i, slot in enumerate(slots):
-            row = i // 4
-            col = i % 4
-            
-            def make_slot_callback(s):
-                return lambda: self.confirm_booking(s)
-            
-            slot_btn = tk.Button(
-                slots_grid, text=f"  {slot['time']}  ", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['text'],
-                activebackground=self.colors['light'], activeforeground=self.colors['text'],
-                relief="solid", bd=1, cursor="hand2", padx=10, pady=8,
-                highlightbackground=self.colors['primary'],
-                command=make_slot_callback(slot)
-            )
-            slot_btn.grid(row=row, column=col, padx=5, pady=5)
-            slot_btn.bind('<Button-1>', lambda e, s=slot: self.confirm_booking(s))
+        self.time_layout.addStretch()
     
-    def confirm_booking(self, slot):
-        """Подтвердить запись"""
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Подтверждение записи")
-        dialog.transient(self.root)
-        dialog.grab_set()
-        dialog.configure(bg=self.colors['white'])
+    def select_slot_and_confirm(self, slot, dialog):
+        """Выбрать слот и подтвердить запись"""
+        selected_date = self.calendar.selectedDate().toPython()
         
-        # Заголовок
-        header = tk.Frame(dialog, bg=self.colors['primary'])
-        header.pack(fill=tk.X)
-        tk.Label(header, text="✅ Подтвердите запись", font=("Arial", 16, "bold"),
-                bg=self.colors['primary'], fg=self.colors['white']).pack(pady=15)
+        # slot теперь строка времени "10:00"
+        time_str = slot['time'] if isinstance(slot, dict) else slot
         
-        # Детали записи
-        frame = tk.Frame(dialog, bg=self.colors['white'], padx=25, pady=15)
-        frame.pack(fill=tk.BOTH, expand=True)
-        
-        details = [
-            ("👨‍🎨", "Мастер", self.selected_master['full_name']),
-            ("✂️", "Услуга", self.selected_service['name']),
-            ("📅", "Дата", self.date_picker.selection_get().strftime("%d.%m.%Y")),
-            ("⏰", "Время", slot['time']),
-            ("💰", "Стоимость", f"{self.selected_service['price']} руб."),
-            ("⏱️", "Длительность", f"{self.selected_service['duration_minutes']} мин."),
-        ]
-        
-        for icon, label, value in details:
-            row = tk.Frame(frame, bg=self.colors['white'])
-            row.pack(fill=tk.X, pady=5)
-            
-            tk.Label(row, text=icon, font=("Arial", 16), bg=self.colors['white']).pack(side=tk.LEFT)
-            
-            text_frame = tk.Frame(row, bg=self.colors['white'])
-            text_frame.pack(side=tk.LEFT, padx=10)
-            
-            tk.Label(text_frame, text=label, font=("Arial", 9), 
-                    bg=self.colors['white'], fg=self.colors['gray']).pack(anchor=tk.W)
-            tk.Label(text_frame, text=value, font=("Arial", 11, "bold"), 
-                    bg=self.colors['white'], fg=self.colors['text']).pack(anchor=tk.W)
-        
-        # Кнопки
-        btn_frame = tk.Frame(dialog, bg=self.colors['white'], padx=25, pady=20)
-        btn_frame.pack(fill=tk.X)
-        
-        def do_confirm():
-            dialog.destroy()
-            self.do_booking(slot)
-        
-        # Кнопка Подтвердить (Frame + Label для macOS)
-        confirm_frame = tk.Frame(btn_frame, bg=self.colors['primary'], cursor="hand2")
-        confirm_frame.pack(fill=tk.X, pady=(0, 10))
-        confirm_label = tk.Label(confirm_frame, text="   Подтвердить запись   ", font=("Arial", 12, "bold"),
-                                bg=self.colors['primary'], fg=self.colors['white'],
-                                padx=20, pady=12, cursor="hand2")
-        confirm_label.pack(fill=tk.X)
-        
-        def confirm_enter(e):
-            confirm_frame.config(bg=self.colors['primary_dark'])
-            confirm_label.config(bg=self.colors['primary_dark'])
-        def confirm_leave(e):
-            confirm_frame.config(bg=self.colors['primary'])
-            confirm_label.config(bg=self.colors['primary'])
-        
-        confirm_frame.bind('<Button-1>', lambda e: do_confirm())
-        confirm_label.bind('<Button-1>', lambda e: do_confirm())
-        confirm_frame.bind('<Enter>', confirm_enter)
-        confirm_frame.bind('<Leave>', confirm_leave)
-        confirm_label.bind('<Enter>', confirm_enter)
-        confirm_label.bind('<Leave>', confirm_leave)
-        
-        # Кнопка Отмена (Frame + Label для macOS)
-        cancel_frame = tk.Frame(btn_frame, bg=self.colors['primary'], cursor="hand2")
-        cancel_frame.pack(fill=tk.X)
-        cancel_label = tk.Label(cancel_frame, text="   Отмена   ", font=("Arial", 11, "bold"),
-                               bg=self.colors['primary'], fg=self.colors['white'],
-                               padx=20, pady=10, cursor="hand2")
-        cancel_label.pack(fill=tk.X)
-        
-        def cancel_enter(e):
-            cancel_frame.config(bg=self.colors['primary_dark'])
-            cancel_label.config(bg=self.colors['primary_dark'])
-        def cancel_leave(e):
-            cancel_frame.config(bg=self.colors['primary'])
-            cancel_label.config(bg=self.colors['primary'])
-        
-        cancel_frame.bind('<Button-1>', lambda e: dialog.destroy())
-        cancel_label.bind('<Button-1>', lambda e: dialog.destroy())
-        cancel_frame.bind('<Enter>', cancel_enter)
-        cancel_frame.bind('<Leave>', cancel_leave)
-        cancel_label.bind('<Enter>', cancel_enter)
-        cancel_label.bind('<Leave>', cancel_leave)
-        
-        # Центрируем диалог после создания всех элементов
-        dialog.update_idletasks()
-        width = dialog.winfo_reqwidth()
-        height = dialog.winfo_reqheight()
-        x = (dialog.winfo_screenwidth() - width) // 2
-        y = (dialog.winfo_screenheight() - height) // 2
-        dialog.geometry(f"{width}x{height}+{x}+{y}")
-        dialog.minsize(400, height)
-    
-    def do_booking(self, slot):
-        """Выполнить запись"""
-        appointment_datetime = datetime.fromisoformat(slot['datetime'])
-        
-        result = self.api.create_appointment(
-            self.current_user['id'],
-            self.selected_master['id'],
-            self.selected_service['id'],
-            appointment_datetime
+        # Диалог подтверждения
+        confirm = self.styled_question(
+            dialog,
+            "Подтверждение записи",
+            f"Подтвердить запись?\n\n"
+            f"Мастер: {self.selected_master['full_name']}\n"
+            f"Услуга: {self.selected_service['name']}\n"
+            f"Дата: {selected_date.strftime('%d.%m.%Y')}\n"
+            f"Время: {time_str}\n"
+            f"Стоимость: {self.selected_service['price']} руб."
         )
         
-        if result["success"]:
-            messagebox.showinfo("Успех", "✅ Запись успешно создана!")
-            self.load_active_appointments()
-            self.load_history()
-            self.show_booking_choice()
-        else:
-            messagebox.showerror("Ошибка", result["error"])
-    
-    def create_appointments_tab(self, parent):
-        """Создать вкладку записей"""
-        frame = tk.Frame(parent, bg=self.colors['white'], padx=20, pady=20)
-        frame.pack(fill=tk.BOTH, expand=True)
-        
-        header = tk.Frame(frame, bg=self.colors['white'])
-        header.pack(fill=tk.X, pady=(0, 15))
-        
-        tk.Label(header, text="📋 Мои записи", font=("Arial", 16, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(side=tk.LEFT)
-        
-        refresh_btn = self.create_styled_button(header, "🔄 Обновить", self.load_active_appointments, 'secondary')
-        refresh_btn.pack(side=tk.RIGHT)
-        
-        # Контейнер с синей рамкой для таблицы (не expand, чтобы таблица не растягивалась)
-        table_border = tk.Frame(frame, bg=self.colors['primary'], padx=1, pady=1)
-        table_border.pack(fill=tk.X, anchor=tk.N)
-        
-        table_inner = tk.Frame(table_border, bg='white')
-        table_inner.pack(fill=tk.BOTH, expand=True)
-        
-        columns = ("id", "date", "time", "master", "service", "status")
-        self.appointments_tree = ttk.Treeview(table_inner, columns=columns, show="headings", height=15)
-        self.appointments_tree.tag_configure('white_bg', background='white')
-        
-        self.appointments_tree.heading("id", text="ID")
-        self.appointments_tree.heading("date", text="Дата")
-        self.appointments_tree.heading("time", text="Время")
-        self.appointments_tree.heading("master", text="Мастер")
-        self.appointments_tree.heading("service", text="Услуга")
-        self.appointments_tree.heading("status", text="Статус")
-        
-        self.appointments_tree.column("id", width=50, anchor="center")
-        self.appointments_tree.column("date", width=100, anchor="center")
-        self.appointments_tree.column("time", width=80, anchor="center")
-        self.appointments_tree.column("master", width=150, anchor="w")
-        self.appointments_tree.column("service", width=200, anchor="w")
-        self.appointments_tree.column("status", width=100, anchor="center")
-        
-        scrollbar = tk.Scrollbar(table_inner, orient=tk.VERTICAL, command=self.appointments_tree.yview,
-                                bg='white', troughcolor='white')
-        self.appointments_tree.configure(yscrollcommand=scrollbar.set)
-        
-        self.appointments_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        btn_frame = tk.Frame(frame, bg=self.colors['white'])
-        btn_frame.pack(fill=tk.X, pady=(15, 0))
-        
-        cancel_btn = self.create_styled_button(btn_frame, "❌ Отменить запись", self.cancel_selected_appointment, 'danger')
-        cancel_btn.pack(side=tk.LEFT)
-        
-        # Белый фон для оставшегося пространства
-        spacer = tk.Frame(frame, bg=self.colors['white'])
-        spacer.pack(fill=tk.BOTH, expand=True)
-        
-        self.load_active_appointments()
-    
-    def load_active_appointments(self):
-        """Загрузить активные записи"""
-        if not hasattr(self, 'appointments_tree'):
-            return
-        if not self.appointments_tree.winfo_exists():
-            return
+        if confirm:
+            # Создаем datetime
+            appointment_datetime = datetime.combine(
+                selected_date,
+                datetime.strptime(time_str, '%H:%M').time()
+            )
             
-        for item in self.appointments_tree.get_children():
-            self.appointments_tree.delete(item)
+            result = self.api.create_appointment(
+                self.current_user['id'],
+                self.selected_master['id'],
+                self.selected_service['id'],
+                appointment_datetime
+            )
+            
+            if result["success"]:
+                self.styled_info(dialog, "Успех", "Запись успешно создана!")
+                dialog.accept()
+                # Очищаем все промежуточные виджеты из стека
+                while self.booking_stack.count() > 1:
+                    widget = self.booking_stack.widget(1)
+                    self.booking_stack.removeWidget(widget)
+                    widget.deleteLater()
+                self.booking_stack.setCurrentIndex(0)
+                self.selected_master = None
+                self.selected_service = None
+                # Обновляем записи и историю
+                self.load_appointments()
+                self.load_history()
+            else:
+                QMessageBox.critical(dialog, "Ошибка", result["error"])
+    
+    def create_appointments_tab(self):
+        """Создать вкладку записей"""
+        tab = QWidget()
+        tab.setStyleSheet(f"background-color: {Colors.BACKGROUND};")
+        
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(20)
+        
+        title = QLabel("Мои записи")
+        title.setFont(QFont("Arial", 24, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.PRIMARY};")
+        layout.addWidget(title)
+        
+        # Кнопка обновления
+        refresh_btn = ModernButton("Обновить", "secondary")
+        refresh_btn.setFixedWidth(150)
+        refresh_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #667EEA, stop:1 #764BA2);
+                color: white;
+                font-weight: bold;
+                font-size: 13px;
+                padding: 10px 16px;
+                border-radius: 8px;
+                border: none;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #5A67D8, stop:1 #6B46C1);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4C51BF, stop:1 #553C9A);
+            }
+        """)
+        refresh_btn.clicked.connect(lambda: self.refresh_appointments(layout))
+        layout.addWidget(refresh_btn)
+        
+        # Контейнер для записей
+        self.appointments_container = QWidget()
+        self.appointments_layout = QVBoxLayout(self.appointments_container)
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("background-color: transparent;")
+        scroll.setWidget(self.appointments_container)
+        layout.addWidget(scroll)
+        
+        # Загружаем записи
+        self.load_appointments()
+        
+        return tab
+    
+    def load_appointments(self):
+        """Загрузить записи"""
+        # Очищаем
+        while self.appointments_layout.count():
+            item = self.appointments_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
         
         result = self.api.get_appointments(self.current_user['id'], upcoming_only=True)
         
-        if result["success"]:
-            appointments = result["data"]
-            for apt in appointments:
-                if apt['status'] == 'scheduled':
-                    dt = datetime.fromisoformat(apt['appointment_datetime'].replace('Z', '+00:00'))
-                    status_text = "🟢 Активна"
-                    
-                    self.appointments_tree.insert("", "end", values=(
-                        apt['id'],
-                        dt.strftime("%d.%m.%Y"),
-                        dt.strftime("%H:%M"),
-                        apt['master']['full_name'],
-                        apt['service']['name'],
-                        status_text
-                    ), tags=(str(apt['id']),))
-    
-    def cancel_selected_appointment(self):
-        """Отменить выбранную запись"""
-        selection = self.appointments_tree.selection()
-        if not selection:
-            messagebox.showwarning("Внимание", "Выберите запись для отмены")
+        if not result["success"]:
+            error_label = QLabel("Ошибка загрузки записей")
+            error_label.setStyleSheet(f"color: {Colors.DANGER};")
+            self.appointments_layout.addWidget(error_label)
             return
         
-        item = self.appointments_tree.item(selection[0])
-        appointment_id = int(item["tags"][0])
+        appointments = result["data"]
         
-        if messagebox.askyesno("Подтверждение", "Вы уверены, что хотите отменить запись?"):
-            result = self.api.cancel_appointment(appointment_id, self.current_user['id'])
+        if not appointments:
+            empty_label = QLabel("У вас пока нет предстоящих записей")
+            empty_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; font-size: 16px;")
+            empty_label.setAlignment(Qt.AlignCenter)
+            self.appointments_layout.addWidget(empty_label)
+            self.appointments_layout.setAlignment(Qt.AlignCenter)
+            return
+        
+        for appointment in appointments:
+            card = Card()
+            card_layout = QHBoxLayout(card)
+            
+            # Информация
+            info = QWidget()
+            info_layout = QVBoxLayout(info)
+            info_layout.setContentsMargins(0, 0, 0, 0)
+            
+            service_name = appointment.get('service', {}).get('name', 'Услуга')
+            master_name = appointment.get('master', {}).get('full_name', 'Мастер')
+            
+            service_label = QLabel(service_name)
+            service_label.setFont(QFont("Arial", 14, QFont.Bold))
+            info_layout.addWidget(service_label)
+            
+            master_label = QLabel(f"Мастер: {master_name}")
+            info_layout.addWidget(master_label)
+            
+            dt = datetime.fromisoformat(appointment['appointment_datetime'].replace('Z', '+00:00'))
+            date_label = QLabel(f"Дата: {dt.strftime('%d.%m.%Y')} в {dt.strftime('%H:%M')}")
+            date_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY};")
+            info_layout.addWidget(date_label)
+            
+            card_layout.addWidget(info)
+            card_layout.addStretch()
+            
+            # Кнопка отмены
+            if appointment.get('status') == 'scheduled':
+                cancel_btn = ModernButton("Отменить", "danger")
+                cancel_btn.setFixedWidth(140)
+                cancel_btn.setStyleSheet("""
+                    QPushButton {
+                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                            stop:0 #EF4444, stop:1 #DC2626);
+                        color: white;
+                        font-weight: bold;
+                        font-size: 13px;
+                        padding: 10px 16px;
+                        border-radius: 8px;
+                        border: none;
+                    }
+                    QPushButton:hover {
+                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                            stop:0 #DC2626, stop:1 #B91C1C);
+                    }
+                    QPushButton:pressed {
+                        background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                            stop:0 #B91C1C, stop:1 #991B1B);
+                    }
+                """)
+                cancel_btn.clicked.connect(lambda checked, a=appointment: self.cancel_appointment(a))
+                card_layout.addWidget(cancel_btn)
+            
+            self.appointments_layout.addWidget(card)
+        
+        self.appointments_layout.addStretch()
+    
+    def refresh_appointments(self, layout):
+        """Обновить записи"""
+        self.load_appointments()
+    
+    def cancel_appointment(self, appointment):
+        """Отменить запись"""
+        confirm = self.styled_question(
+            self,
+            "Подтверждение",
+            "Вы уверены, что хотите отменить запись?"
+        )
+        
+        if confirm:
+            result = self.api.cancel_appointment(appointment['id'], self.current_user['id'])
+            
             if result["success"]:
-                messagebox.showinfo("Успех", "Запись отменена")
-                self.load_active_appointments()
+                QMessageBox.information(self, "Успех", "Запись отменена")
+                self.load_appointments()
                 self.load_history()
             else:
-                messagebox.showerror("Ошибка", result["error"])
+                QMessageBox.critical(self, "Ошибка", result["error"])
     
-    def create_history_tab(self, parent):
+    def create_history_tab(self):
         """Создать вкладку истории"""
-        frame = tk.Frame(parent, bg=self.colors['white'], padx=20, pady=20)
-        frame.pack(fill=tk.BOTH, expand=True)
+        tab = QWidget()
+        tab.setStyleSheet(f"background-color: {Colors.BACKGROUND};")
         
-        header = tk.Frame(frame, bg=self.colors['white'])
-        header.pack(fill=tk.X, pady=(0, 15))
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(20)
         
-        tk.Label(header, text="📜 История записей", font=("Arial", 16, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(side=tk.LEFT)
+        # Заголовок с кнопкой обновления
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
         
-        refresh_btn = self.create_styled_button(header, "🔄 Обновить", self.load_history, 'secondary')
-        refresh_btn.pack(side=tk.RIGHT)
+        title = QLabel("История записей")
+        title.setFont(QFont("Arial", 24, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.PRIMARY};")
+        header_layout.addWidget(title)
         
-        # Контейнер с синей рамкой для таблицы (не expand, чтобы таблица не растягивалась)
-        table_border = tk.Frame(frame, bg=self.colors['primary'], padx=1, pady=1)
-        table_border.pack(fill=tk.X, anchor=tk.N)
+        header_layout.addStretch()
         
-        table_inner = tk.Frame(table_border, bg='white')
-        table_inner.pack(fill=tk.BOTH, expand=True)
+        refresh_btn = ModernButton("Обновить", "primary")
+        refresh_btn.setFixedWidth(150)
+        refresh_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #667EEA, stop:1 #764BA2);
+                color: white;
+                font-weight: bold;
+                font-size: 13px;
+                padding: 10px 16px;
+                border-radius: 8px;
+                border: none;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #5A67D8, stop:1 #6B46C1);
+            }
+        """)
+        refresh_btn.clicked.connect(self.load_history)
+        header_layout.addWidget(refresh_btn)
         
-        columns = ("id", "date", "time", "master", "service", "status")
-        self.history_tree = ttk.Treeview(table_inner, columns=columns, show="headings", height=18)
-        self.history_tree.tag_configure('white_bg', background='white')
+        layout.addWidget(header)
         
-        self.history_tree.heading("id", text="ID")
-        self.history_tree.heading("date", text="Дата")
-        self.history_tree.heading("time", text="Время")
-        self.history_tree.heading("master", text="Мастер")
-        self.history_tree.heading("service", text="Услуга")
-        self.history_tree.heading("status", text="Статус")
+        # Таблица
+        self.history_table = QTableWidget()
+        self.history_table.setColumnCount(5)
+        self.history_table.setHorizontalHeaderLabels(["Дата", "Время", "Услуга", "Мастер", "Статус"])
+        # Настраиваем ширину колонок
+        header = self.history_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # Дата
+        header.setSectionResizeMode(1, QHeaderView.ResizeToContents)  # Время
+        header.setSectionResizeMode(2, QHeaderView.Stretch)           # Услуга
+        header.setSectionResizeMode(3, QHeaderView.Stretch)           # Мастер
+        header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Статус
+        self.history_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.history_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.history_table.setAlternatingRowColors(True)
         
-        self.history_tree.column("id", width=50, anchor="center")
-        self.history_tree.column("date", width=100, anchor="center")
-        self.history_tree.column("time", width=80, anchor="center")
-        self.history_tree.column("master", width=150, anchor="w")
-        self.history_tree.column("service", width=200, anchor="w")
-        self.history_tree.column("status", width=100, anchor="center")
+        layout.addWidget(self.history_table)
         
-        scrollbar = tk.Scrollbar(table_inner, orient=tk.VERTICAL, command=self.history_tree.yview,
-                                bg='white', troughcolor='white')
-        self.history_tree.configure(yscrollcommand=scrollbar.set)
+        # Сообщение о пустой истории (поверх таблицы)
+        self.history_empty_label = QLabel("История записей пуста")
+        self.history_empty_label.setStyleSheet(f"color: {Colors.TEXT_SECONDARY}; font-size: 16px;")
+        self.history_empty_label.setAlignment(Qt.AlignCenter)
+        self.history_empty_label.setVisible(False)
+        layout.addWidget(self.history_empty_label)
         
-        self.history_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        # Растягиваем пустое пространство вниз
+        layout.addStretch()
         
-        # Белый фон для оставшегося пространства
-        spacer = tk.Frame(frame, bg=self.colors['white'])
-        spacer.pack(fill=tk.BOTH, expand=True)
-        
+        # Загружаем историю
         self.load_history()
+        
+        return tab
     
     def load_history(self):
         """Загрузить историю записей"""
-        if not hasattr(self, 'history_tree'):
-            return
-        if not self.history_tree.winfo_exists():
+        if not hasattr(self, 'history_table'):
             return
             
-        for item in self.history_tree.get_children():
-            self.history_tree.delete(item)
-        
         result = self.api.get_appointments(self.current_user['id'])
         
         if result["success"]:
             appointments = result["data"]
-            for apt in appointments:
-                dt = datetime.fromisoformat(apt['appointment_datetime'].replace('Z', '+00:00'))
+            # Очищаем таблицу перед загрузкой
+            self.history_table.clearContents()
+            self.history_table.setRowCount(len(appointments))
+            
+            # Показываем/скрываем сообщение о пустой истории
+            if hasattr(self, 'history_empty_label'):
+                if not appointments:
+                    self.history_empty_label.setVisible(True)
+                    self.history_table.setVisible(False)
+                else:
+                    self.history_empty_label.setVisible(False)
+                    self.history_table.setVisible(True)
+            
+            for i, appointment in enumerate(appointments):
+                dt = datetime.fromisoformat(appointment['appointment_datetime'].replace('Z', '+00:00'))
+                
+                self.history_table.setItem(i, 0, QTableWidgetItem(dt.strftime('%d.%m.%Y')))
+                self.history_table.setItem(i, 1, QTableWidgetItem(dt.strftime('%H:%M')))
+                self.history_table.setItem(i, 2, QTableWidgetItem(appointment.get('service', {}).get('name', '')))
+                self.history_table.setItem(i, 3, QTableWidgetItem(appointment.get('master', {}).get('full_name', '')))
                 
                 status_map = {
-                    'scheduled': '🟢 Активна',
-                    'completed': '✅ Завершена',
-                    'canceled': '❌ Отменена'
+                    'scheduled': 'Запланировано',
+                    'completed': 'Завершено',
+                    'cancelled': 'Отменено',
+                    'canceled': 'Отменено'  # Оба варианта написания
                 }
-                status_text = status_map.get(apt['status'], apt['status'])
-                
-                self.history_tree.insert("", "end", values=(
-                    apt['id'],
-                    dt.strftime("%d.%m.%Y"),
-                    dt.strftime("%H:%M"),
-                    apt['master']['full_name'],
-                    apt['service']['name'],
-                    status_text
-                ))
+                status = appointment.get('status', '')
+                status_text = status_map.get(status, status if status else 'Неизвестно')
+                self.history_table.setItem(i, 4, QTableWidgetItem(status_text))
+            
+            # Обновляем отображение
+            self.history_table.viewport().update()
     
     def show_admin_interface(self):
         """Показать интерфейс администратора"""
-        self.clear_root()
+        if self.admin_screen:
+            self.central_widget.removeWidget(self.admin_screen)
+            self.admin_screen.deleteLater()
         
-        header = tk.Frame(self.root, bg=self.colors['primary'], height=60)
-        header.pack(fill=tk.X)
-        header.pack_propagate(False)
-        
-        header_content = tk.Frame(header, bg=self.colors['primary'])
-        header_content.pack(fill=tk.BOTH, expand=True, padx=20)
-        
-        tk.Label(header_content, text="🔧 Панель администратора", font=("Arial", 16, "bold"),
-                bg=self.colors['primary'], fg=self.colors['white']).pack(side=tk.LEFT, pady=15)
-        
-        tk.Label(header_content, text="BeautyPro", font=("Arial", 12),
-                bg=self.colors['primary'], fg=self.colors['white']).pack(side=tk.LEFT, padx=20, pady=15)
-        
-        logout_btn = self.create_button(header_content, "  Выйти  ", self.logout,
-                                       bg=self.colors['white'], fg=self.colors['primary'],
-                                       font=("Arial", 10, "bold"), padx=12, pady=6)
-        logout_btn.pack(side=tk.RIGHT, pady=15)
-        
-        # Контейнер для notebook с белым фоном
-        notebook_container = tk.Frame(self.root, bg=self.colors['white'])
-        notebook_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        notebook = ttk.Notebook(notebook_container)
-        notebook.pack(fill=tk.BOTH, expand=True)
-        
-        # Используем tk.Frame вместо ttk.Frame для точного контроля цвета
-        masters_tab = tk.Frame(notebook, bg=self.colors['white'])
-        notebook.add(masters_tab, text="👨‍🎨 Мастера")
-        self.create_masters_management_tab(masters_tab)
-        
-        services_tab = tk.Frame(notebook, bg=self.colors['white'])
-        notebook.add(services_tab, text="✂️ Услуги")
-        self.create_services_view_tab(services_tab)
+        self.admin_screen = self.create_admin_screen()
+        self.central_widget.addWidget(self.admin_screen)
+        self.central_widget.setCurrentWidget(self.admin_screen)
     
-    def create_masters_management_tab(self, parent):
+    def create_admin_screen(self):
+        """Создать экран администратора"""
+        screen = QWidget()
+        layout = QVBoxLayout(screen)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # Хедер
+        header = QFrame()
+        header.setFixedHeight(70)
+        header.setStyleSheet(f"""
+            QFrame {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 {Colors.PRIMARY_DARK}, stop:1 {Colors.PRIMARY});
+            }}
+            QLabel {{
+                color: white;
+            }}
+        """)
+        
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(30, 0, 30, 0)
+        
+        logo = QLabel("BeautyPro Admin")
+        logo.setFont(QFont("Arial", 18, QFont.Bold))
+        header_layout.addWidget(logo)
+        
+        header_layout.addStretch()
+        
+        logout_btn = QPushButton("Выйти")
+        logout_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: white;
+                color: {Colors.PRIMARY};
+                padding: 8px 20px;
+                border-radius: 6px;
+                font-weight: bold;
+            }}
+            QPushButton:hover {{
+                background-color: {Colors.PRIMARY_LIGHT};
+            }}
+        """)
+        logout_btn.setCursor(Qt.PointingHandCursor)
+        logout_btn.clicked.connect(self.logout)
+        header_layout.addWidget(logout_btn)
+        
+        layout.addWidget(header)
+        
+        # Табы
+        tabs = QTabWidget()
+        
+        # Мастера
+        masters_tab = self.create_masters_management_tab()
+        tabs.addTab(masters_tab, "Мастера")
+        
+        # Услуги
+        services_tab = self.create_services_management_tab()
+        tabs.addTab(services_tab, "Услуги")
+        
+        layout.addWidget(tabs)
+        
+        return screen
+    
+    def create_masters_management_tab(self):
         """Создать вкладку управления мастерами"""
-        main_frame = tk.Frame(parent, bg=self.colors['white'])
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        tab = QWidget()
+        tab.setStyleSheet(f"background-color: {Colors.BACKGROUND};")
         
-        header = tk.Frame(main_frame, bg=self.colors['white'])
-        header.pack(fill=tk.X, pady=(0, 15))
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(20)
+        layout.setContentsMargins(20, 20, 20, 20)
         
-        tk.Label(header, text="👨‍🎨 Управление мастерами", font=("Arial", 16, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(side=tk.LEFT)
+        # Заголовок и кнопка добавления
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
         
-        btn_frame = tk.Frame(main_frame, bg=self.colors['white'])
-        btn_frame.pack(fill=tk.X, pady=(0, 15))
+        title = QLabel("Управление мастерами")
+        title.setFont(QFont("Arial", 24, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.PRIMARY};")
+        header_layout.addWidget(title)
         
-        # Левая группа кнопок
-        left_btns = tk.Frame(btn_frame, bg=self.colors['white'])
-        left_btns.pack(side=tk.LEFT)
+        header_layout.addStretch()
         
-        add_btn = self.create_button(left_btns, "  Добавить  ", self.show_add_master_dialog)
-        add_btn.pack(side=tk.LEFT, padx=(0, 10))
+        add_btn = ModernButton("+ Добавить мастера", "primary")
+        add_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #667EEA, stop:1 #764BA2);
+                color: white;
+                font-weight: bold;
+                font-size: 14px;
+                padding: 12px 24px;
+                border-radius: 8px;
+                border: none;
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #5A67D8, stop:1 #6B46C1);
+            }}
+            QPushButton:pressed {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4C51BF, stop:1 #553C9A);
+            }}
+        """)
+        add_btn.clicked.connect(self.show_add_master_dialog)
+        header_layout.addWidget(add_btn)
         
-        edit_btn = self.create_button(left_btns, "  Редактировать  ", self.show_edit_master_dialog)
-        edit_btn.pack(side=tk.LEFT, padx=(0, 10))
+        layout.addWidget(header)
         
-        delete_btn = self.create_button(left_btns, "  Удалить  ", self.delete_selected_master,
-                                       bg=self.colors['danger'])
-        delete_btn.pack(side=tk.LEFT, padx=(0, 10))
+        # Таблица мастеров
+        self.masters_table = QTableWidget()
+        self.masters_table.setColumnCount(5)
+        self.masters_table.setHorizontalHeaderLabels(["ID", "ФИО", "Профессия", "Контакт", "Действия"])
         
-        services_btn = self.create_button(left_btns, "  Назначить услуги  ", self.show_assign_services_dialog)
-        services_btn.pack(side=tk.LEFT)
+        # Настраиваем ширину колонок для оптимального отображения
+        masters_header = self.masters_table.horizontalHeader()
+        masters_header.setStretchLastSection(False)  # Отключаем растягивание последней колонки
         
-        # Кнопка обновить справа
-        refresh_btn = self.create_button(btn_frame, "  Обновить  ", self.load_masters_list)
-        refresh_btn.pack(side=tk.RIGHT)
+        # ID - компактная колонка для чисел до 9999
+        masters_header.setSectionResizeMode(0, QHeaderView.Fixed)
+        self.masters_table.setColumnWidth(0, 50)
         
-        content_frame = tk.Frame(main_frame, bg=self.colors['white'])
-        content_frame.pack(fill=tk.BOTH, expand=True)
+        # ФИО - растягивается, занимает оставшееся пространство
+        masters_header.setSectionResizeMode(1, QHeaderView.Stretch)
+        masters_header.setMinimumSectionSize(200)
         
-        left_frame = tk.Frame(content_frame, bg=self.colors['white'])
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Профессия - автоподстройка под содержимое с минимумом
+        masters_header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.masters_table.horizontalHeader().setMinimumSectionSize(130)
         
-        # Контейнер с синей рамкой для таблицы (не expand, чтобы таблица не растягивалась)
-        table_border = tk.Frame(left_frame, bg=self.colors['primary'], padx=1, pady=1)
-        table_border.pack(fill=tk.X, anchor=tk.N)
+        # Контакт - фиксированная ширина для телефонов "+7 (999) 000-00-00"
+        masters_header.setSectionResizeMode(3, QHeaderView.Fixed)
+        self.masters_table.setColumnWidth(3, 160)
         
-        table_inner = tk.Frame(table_border, bg='white')
-        table_inner.pack(fill=tk.BOTH, expand=True)
+        # Действия - фиксированная ширина для двух кнопок (130+130+15+20=295 -> 300px)
+        masters_header.setSectionResizeMode(4, QHeaderView.Fixed)
+        self.masters_table.setColumnWidth(4, 300)
         
-        columns = ("id", "name", "profession", "contact", "services")
-        self.masters_tree = ttk.Treeview(table_inner, columns=columns, show="headings", height=18)
-        self.masters_tree.tag_configure('white_bg', background='white')
+        self.masters_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.masters_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.masters_table.setAlternatingRowColors(True)
         
-        self.masters_tree.heading("id", text="ID")
-        self.masters_tree.heading("name", text="ФИО")
-        self.masters_tree.heading("profession", text="Профессия")
-        self.masters_tree.heading("contact", text="Контакт")
-        self.masters_tree.heading("services", text="Услуги")
+        layout.addWidget(self.masters_table)
         
-        self.masters_tree.column("id", width=80, anchor="center")
-        self.masters_tree.column("name", width=200, anchor="w")
-        self.masters_tree.column("profession", width=180, anchor="w")
-        self.masters_tree.column("contact", width=180, anchor="w")
-        self.masters_tree.column("services", width=100, anchor="center")
+        # Загружаем мастеров
+        self.load_masters_table()
         
-        scrollbar = tk.Scrollbar(table_inner, orient=tk.VERTICAL, command=self.masters_tree.yview,
-                                bg='white', troughcolor='white')
-        self.masters_tree.configure(yscrollcommand=scrollbar.set)
-        
-        self.masters_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        self.masters_tree.bind('<<TreeviewSelect>>', self.on_master_select)
-        
-        # Белый фон для оставшегося пространства под таблицей
-        spacer = tk.Frame(left_frame, bg=self.colors['white'])
-        spacer.pack(fill=tk.BOTH, expand=True)
-        
-        right_frame = tk.Frame(content_frame, bg=self.colors['white'], width=300)
-        right_frame.pack(side=tk.RIGHT, fill=tk.Y, padx=(20, 0))
-        right_frame.pack_propagate(False)
-        
-        tk.Label(right_frame, text="✂️ Услуги мастера", font=("Arial", 12, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W, pady=(0, 10))
-        
-        list_container = tk.Frame(right_frame, bg=self.colors['white'], padx=5, pady=5,
-                                 highlightbackground=self.colors['primary'], highlightthickness=1)
-        list_container.pack(fill=tk.BOTH, expand=True)
-        
-        self.master_services_list = tk.Listbox(list_container, height=20, width=30,
-                                               font=("Arial", 10), bg=self.colors['white'],
-                                               fg=self.colors['text'],
-                                               selectbackground=self.colors['primary'],
-                                               selectforeground=self.colors['white'],
-                                               relief='flat', highlightthickness=0)
-        self.master_services_list.pack(fill=tk.BOTH, expand=True)
-        
-        self.load_masters_list()
+        return tab
     
-    def load_masters_list(self):
-        """Загрузить список мастеров"""
-        for item in self.masters_tree.get_children():
-            self.masters_tree.delete(item)
-        
+    def load_masters_table(self):
+        """Загрузить таблицу мастеров"""
         result = self.api.get_masters(active_only=False)
         
-        if result["success"]:
-            self.masters_data = result["data"]
-            for master in self.masters_data:
-                profession = master.get('profession', {}).get('name', '') if master.get('profession') else ''
-                services_count = len(master.get('services', []))
-                
-                self.masters_tree.insert("", "end", values=(
-                    master['id'],
-                    master['full_name'],
-                    profession,
-                    master.get('contact_info', ''),
-                    f"{services_count} услуг"
-                ), tags=(str(master['id']),))
-    
-    def on_master_select(self, event):
-        """Обработчик выбора мастера"""
-        self.master_services_list.delete(0, tk.END)
-        
-        selection = self.masters_tree.selection()
-        if not selection:
+        if not result["success"]:
             return
         
-        item = self.masters_tree.item(selection[0])
-        master_id = int(item["tags"][0])
+        masters = result["data"]
+        self.masters_table.setRowCount(len(masters))
         
-        master = next((m for m in self.masters_data if m['id'] == master_id), None)
-        if master:
-            for service in master.get('services', []):
-                self.master_services_list.insert(tk.END, f"✂️ {service['name']} - {service['price']} руб.")
+        # Устанавливаем высоту строк для видимости кнопок
+        self.masters_table.verticalHeader().setDefaultSectionSize(75)
+        
+        for i, master in enumerate(masters):
+            self.masters_table.setItem(i, 0, QTableWidgetItem(str(master['id'])))
+            self.masters_table.setItem(i, 1, QTableWidgetItem(master['full_name']))
+            
+            profession = master.get('profession', {}).get('name', '') if master.get('profession') else ''
+            self.masters_table.setItem(i, 2, QTableWidgetItem(profession))
+            self.masters_table.setItem(i, 3, QTableWidgetItem(master.get('contact_info', '')))
+            
+            # Кнопки действий - контейнер с выравниванием по правому краю
+            actions = QWidget()
+            actions_layout = QHBoxLayout(actions)
+            actions_layout.setContentsMargins(5, 10, 10, 10)  # Вертикальные отступы для центрирования
+            actions_layout.setSpacing(8)  # Промежуток между кнопками
+            actions_layout.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            
+            edit_btn = QPushButton("Изменить")
+            edit_btn.setFixedSize(130, 36)  # Фиксированный размер кнопки
+            edit_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {Colors.PRIMARY};
+                    color: white;
+                    font-weight: bold;
+                    font-size: 13px;
+                    border: none;
+                    border-radius: 5px;
+                    padding: 0px;
+                }}
+                QPushButton:hover {{
+                    background-color: {Colors.PRIMARY_DARK};
+                }}
+                QPushButton:pressed {{
+                    background-color: #3730A3;
+                }}
+            """)
+            edit_btn.setCursor(Qt.PointingHandCursor)
+            edit_btn.clicked.connect(lambda checked, m=master: self.show_edit_master_dialog(m))
+            actions_layout.addWidget(edit_btn)
+            
+            delete_btn = QPushButton("Удалить")
+            delete_btn.setFixedSize(130, 36)  # Фиксированный размер кнопки
+            delete_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {Colors.DANGER};
+                    color: white;
+                    font-weight: bold;
+                    font-size: 13px;
+                    border: none;
+                    border-radius: 5px;
+                    padding: 0px;
+                }}
+                QPushButton:hover {{
+                    background-color: #DC2626;
+                }}
+                QPushButton:pressed {{
+                    background-color: #B91C1C;
+                }}
+            """)
+            delete_btn.setCursor(Qt.PointingHandCursor)
+            delete_btn.clicked.connect(lambda checked, m=master: self.delete_master(m))
+            actions_layout.addWidget(delete_btn)
+            
+            self.masters_table.setCellWidget(i, 4, actions)
     
     def show_add_master_dialog(self):
         """Показать диалог добавления мастера"""
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Добавить мастера")
-        dialog.geometry("450x400")
-        dialog.transient(self.root)
-        dialog.grab_set()
-        dialog.configure(bg=self.colors['white'])
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Добавить мастера")
+        dialog.setFixedSize(500, 480)
+        dialog.setStyleSheet(f"background-color: {Colors.WHITE};")
         
-        header = tk.Frame(dialog, bg=self.colors['secondary'], height=60)
-        header.pack(fill=tk.X)
-        header.pack_propagate(False)
-        tk.Label(header, text="➕ Добавить мастера", font=("Arial", 16, "bold"),
-                bg=self.colors['secondary'], fg=self.colors['white']).pack(pady=15)
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(15)
+        layout.setContentsMargins(30, 30, 30, 30)
         
-        frame = tk.Frame(dialog, bg=self.colors['white'], padx=25, pady=20)
-        frame.pack(fill=tk.BOTH, expand=True)
+        title = QLabel("Новый мастер")
+        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.PRIMARY};")
+        layout.addWidget(title)
         
-        tk.Label(frame, text="👤 ФИО:", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        name_entry = tk.Entry(frame, width=40, font=("Arial", 11), relief="solid", bd=2,
-                             bg="#0066FF", fg="white", insertbackground="white",
-                             highlightthickness=2, highlightcolor="#0066FF", highlightbackground="#0066FF")
-        name_entry.pack(fill=tk.X, pady=(5, 15), ipady=8)
+        # ФИО
+        name_label = QLabel("ФИО")
+        name_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(name_label)
         
-        tk.Label(frame, text="💼 Профессия:", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        profession_var = tk.StringVar()
+        name_input = ModernInput("Введите ФИО")
+        layout.addWidget(name_input)
         
+        # Профессия
+        prof_label = QLabel("Профессия")
+        prof_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(prof_label)
+        
+        prof_input = ModernInput("Введите профессию")
+        layout.addWidget(prof_input)
+        
+        # Загружаем профессии для поиска
         result = self.api.get_professions()
-        professions = []
-        profession_names = []
-        if result["success"]:
-            professions = result["data"]
-            profession_names = [p["name"] for p in professions]
+        professions = result["data"] if result["success"] else []
         
-        prof_container, _ = self.create_white_dropdown(frame, profession_var, profession_names)
-        prof_container.pack(fill=tk.X, pady=(5, 15))
+        # Контакт
+        contact_label = QLabel("Контакт")
+        contact_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(contact_label)
         
-        tk.Label(frame, text="📞 Контакт:", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        contact_entry = tk.Entry(frame, width=40, font=("Arial", 11), relief="solid", bd=2,
-                                bg="#0066FF", fg="white", insertbackground="white",
-                                highlightthickness=2, highlightcolor="#0066FF", highlightbackground="#0066FF")
-        contact_entry.pack(fill=tk.X, pady=(5, 20), ipady=8)
+        contact_input = ModernInput("Телефон или email")
+        layout.addWidget(contact_input)
         
-        def save():
-            name = name_entry.get().strip()
-            profession_name = profession_var.get()
-            contact = contact_entry.get().strip()
+        layout.addStretch()
+        
+        # Кнопки
+        buttons = QWidget()
+        buttons_layout = QHBoxLayout(buttons)
+        
+        cancel_btn = ModernButton("Отмена", "secondary")
+        cancel_btn.setStyleSheet(f"""
+            background-color: {Colors.WHITE};
+            color: {Colors.PRIMARY};
+            border: 2px solid {Colors.PRIMARY};
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+        """)
+        cancel_btn.clicked.connect(dialog.reject)
+        buttons_layout.addWidget(cancel_btn)
+        
+        save_btn = ModernButton("Сохранить", "primary")
+        save_btn.setStyleSheet("""
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #667EEA, stop:1 #764BA2);
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+        """)
+        
+        def save_master():
+            name = name_input.text().strip()
+            profession_name = prof_input.text().strip()
+            contact = contact_input.text().strip()
             
-            if not name or not profession_name:
-                messagebox.showwarning("Внимание", "Заполните обязательные поля")
+            if not name:
+                QMessageBox.warning(dialog, "Внимание", "Введите ФИО")
                 return
             
-            profession_id = next((p["id"] for p in professions if p["name"] == profession_name), None)
+            # Ищем профессию по имени
+            profession_id = None
+            for prof in professions:
+                if prof['name'].lower() == profession_name.lower():
+                    profession_id = prof['id']
+                    break
             
             result = self.api.create_master(name, profession_id, contact)
             
             if result["success"]:
-                messagebox.showinfo("Успех", "Мастер добавлен!")
-                dialog.destroy()
-                self.load_masters_list()
+                self.styled_info(dialog, "Успех", "Мастер добавлен")
+                dialog.accept()
+                self.load_masters_table()
             else:
-                messagebox.showerror("Ошибка", result["error"])
+                QMessageBox.critical(dialog, "Ошибка", result["error"])
         
-        btn_frame = tk.Frame(frame, bg=self.colors['white'])
-        btn_frame.pack(fill=tk.X)
+        save_btn.clicked.connect(save_master)
+        buttons_layout.addWidget(save_btn)
         
-        save_btn = self.create_styled_button(btn_frame, "💾 Сохранить", save, 'accent')
-        save_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5), ipady=8)
+        layout.addWidget(buttons)
         
-        cancel_btn = self.create_styled_button(btn_frame, "❌ Отмена", dialog.destroy, 'secondary')
-        cancel_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0), ipady=8)
+        dialog.exec()
     
-    def show_edit_master_dialog(self):
+    def show_edit_master_dialog(self, master):
         """Показать диалог редактирования мастера"""
-        selection = self.masters_tree.selection()
-        if not selection:
-            messagebox.showwarning("Внимание", "Выберите мастера")
-            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Редактировать мастера")
+        dialog.setFixedSize(500, 480)
+        dialog.setStyleSheet(f"background-color: {Colors.WHITE};")
         
-        item = self.masters_tree.item(selection[0])
-        master_id = int(item["tags"][0])
-        master = next((m for m in self.masters_data if m['id'] == master_id), None)
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(15)
+        layout.setContentsMargins(30, 30, 30, 30)
         
-        if not master:
-            return
+        title = QLabel("Редактирование")
+        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.PRIMARY};")
+        layout.addWidget(title)
         
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Редактировать мастера")
-        dialog.geometry("450x400")
-        dialog.transient(self.root)
-        dialog.grab_set()
-        dialog.configure(bg=self.colors['white'])
+        # ФИО
+        name_label = QLabel("ФИО")
+        name_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(name_label)
         
-        header = tk.Frame(dialog, bg=self.colors['secondary'], height=60)
-        header.pack(fill=tk.X)
-        header.pack_propagate(False)
-        tk.Label(header, text="✏️ Редактировать мастера", font=("Arial", 16, "bold"),
-                bg=self.colors['secondary'], fg=self.colors['white']).pack(pady=15)
+        name_input = ModernInput()
+        name_input.setText(master['full_name'])
+        layout.addWidget(name_input)
         
-        frame = tk.Frame(dialog, bg=self.colors['white'], padx=25, pady=20)
-        frame.pack(fill=tk.BOTH, expand=True)
+        # Профессия
+        prof_label = QLabel("Профессия")
+        prof_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(prof_label)
         
-        tk.Label(frame, text="👤 ФИО:", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        name_entry = tk.Entry(frame, width=40, font=("Arial", 11), relief="solid", bd=2,
-                             bg="#0066FF", fg="white", insertbackground="white",
-                             highlightthickness=2, highlightcolor="#0066FF", highlightbackground="#0066FF")
-        name_entry.insert(0, master['full_name'])
-        name_entry.pack(fill=tk.X, pady=(5, 15), ipady=8)
+        prof_input = ModernInput()
+        # Устанавливаем текущую профессию
+        if master.get('profession'):
+            prof_input.setText(master['profession'].get('name', ''))
+        layout.addWidget(prof_input)
         
-        tk.Label(frame, text="💼 Профессия:", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        profession_var = tk.StringVar()
-        
+        # Загружаем профессии для поиска
         result = self.api.get_professions()
-        professions = []
-        profession_names = []
-        if result["success"]:
-            professions = result["data"]
-            profession_names = [p["name"] for p in professions]
-            if master.get('profession'):
-                profession_var.set(master['profession']['name'])
+        professions = result["data"] if result["success"] else []
         
-        prof_container, _ = self.create_white_dropdown(frame, profession_var, profession_names)
-        prof_container.pack(fill=tk.X, pady=(5, 15))
+        # Контакт
+        contact_label = QLabel("Контакт")
+        contact_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(contact_label)
         
-        tk.Label(frame, text="📞 Контакт:", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        contact_entry = tk.Entry(frame, width=40, font=("Arial", 11), relief="solid", bd=2,
-                                bg="#0066FF", fg="white", insertbackground="white",
-                                highlightthickness=2, highlightcolor="#0066FF", highlightbackground="#0066FF")
-        contact_entry.insert(0, master.get('contact_info', ''))
-        contact_entry.pack(fill=tk.X, pady=(5, 20), ipady=8)
+        contact_input = ModernInput()
+        contact_input.setText(master.get('contact_info', ''))
+        layout.addWidget(contact_input)
         
-        def save():
-            name = name_entry.get().strip()
-            profession_name = profession_var.get()
-            contact = contact_entry.get().strip()
+        layout.addStretch()
+        
+        # Кнопки
+        buttons = QWidget()
+        buttons_layout = QHBoxLayout(buttons)
+        
+        cancel_btn = ModernButton("Отмена", "secondary")
+        cancel_btn.setStyleSheet(f"""
+            background-color: {Colors.WHITE};
+            color: {Colors.PRIMARY};
+            border: 2px solid {Colors.PRIMARY};
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+        """)
+        cancel_btn.clicked.connect(dialog.reject)
+        buttons_layout.addWidget(cancel_btn)
+        
+        save_btn = ModernButton("Сохранить", "primary")
+        save_btn.setStyleSheet("""
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #667EEA, stop:1 #764BA2);
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+        """)
+        
+        def update_master():
+            name = name_input.text().strip()
+            profession_name = prof_input.text().strip()
+            contact = contact_input.text().strip()
             
-            profession_id = next((p["id"] for p in professions if p["name"] == profession_name), None)
+            if not name:
+                QMessageBox.warning(dialog, "Внимание", "Введите ФИО")
+                return
             
-            result = self.api.update_master(master_id, name, profession_id, contact)
+            # Ищем профессию по имени
+            profession_id = None
+            for prof in professions:
+                if prof['name'].lower() == profession_name.lower():
+                    profession_id = prof['id']
+                    break
             
-            if result["success"]:
-                messagebox.showinfo("Успех", "Мастер обновлён!")
-                dialog.destroy()
-                self.load_masters_list()
-            else:
-                messagebox.showerror("Ошибка", result["error"])
-        
-        btn_frame = tk.Frame(frame, bg=self.colors['white'])
-        btn_frame.pack(fill=tk.X)
-        
-        save_btn = self.create_styled_button(btn_frame, "💾 Сохранить", save, 'accent')
-        save_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5), ipady=8)
-        
-        cancel_btn = self.create_styled_button(btn_frame, "❌ Отмена", dialog.destroy, 'secondary')
-        cancel_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0), ipady=8)
-    
-    def delete_selected_master(self):
-        """Удалить выбранного мастера"""
-        selection = self.masters_tree.selection()
-        if not selection:
-            messagebox.showwarning("Внимание", "Выберите мастера")
-            return
-        
-        item = self.masters_tree.item(selection[0])
-        master_id = int(item["tags"][0])
-        
-        if messagebox.askyesno("Подтверждение", "Вы уверены, что хотите удалить мастера?"):
-            result = self.api.delete_master(master_id)
-            if result["success"]:
-                messagebox.showinfo("Успех", "Мастер удалён")
-                self.load_masters_list()
-            else:
-                messagebox.showerror("Ошибка", result["error"])
-    
-    def show_assign_services_dialog(self):
-        """Показать диалог назначения услуг мастеру"""
-        selection = self.masters_tree.selection()
-        if not selection:
-            messagebox.showwarning("Внимание", "Выберите мастера")
-            return
-        
-        item = self.masters_tree.item(selection[0])
-        master_id = int(item["tags"][0])
-        master = next((m for m in self.masters_data if m['id'] == master_id), None)
-        
-        if not master:
-            return
-        
-        dialog = tk.Toplevel(self.root)
-        dialog.title(f"Услуги мастера: {master['full_name']}")
-        dialog.geometry("500x550")
-        dialog.transient(self.root)
-        dialog.grab_set()
-        dialog.configure(bg=self.colors['white'])
-        
-        header = tk.Frame(dialog, bg=self.colors['primary'], height=60)
-        header.pack(fill=tk.X)
-        header.pack_propagate(False)
-        tk.Label(header, text=f"✂️ Услуги: {master['full_name']}", font=("Arial", 14, "bold"),
-                bg=self.colors['primary'], fg=self.colors['white']).pack(pady=15)
-        
-        frame = tk.Frame(dialog, bg=self.colors['white'], padx=20, pady=15)
-        frame.pack(fill=tk.BOTH, expand=True)
-        
-        tk.Label(frame, text="Выберите услуги:", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W, pady=(0, 10))
-        
-        result = self.api.get_services()
-        services = result["data"] if result["success"] else []
-        
-        current_service_ids = [s['id'] for s in master.get('services', [])]
-        
-        # Контейнер для canvas и scrollbar с рамкой
-        canvas_container = tk.Frame(frame, bg=self.colors['primary'], padx=1, pady=1)
-        canvas_container.pack(fill=tk.BOTH, expand=True)
-        
-        inner_container = tk.Frame(canvas_container, bg=self.colors['white'])
-        inner_container.pack(fill=tk.BOTH, expand=True)
-        
-        canvas = tk.Canvas(inner_container, bg=self.colors['white'], highlightthickness=0, height=350)
-        scrollbar = tk.Scrollbar(inner_container, orient="vertical", command=canvas.yview, 
-                                bg=self.colors['white'], troughcolor=self.colors['light'],
-                                activebackground=self.colors['primary'])
-        scrollable_frame = tk.Frame(canvas, bg=self.colors['white'])
-        
-        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw", width=430)
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        service_vars = {}
-        checkbuttons = []
-        
-        for service in services:
-            var = tk.BooleanVar(value=service['id'] in current_service_ids)
-            service_vars[service['id']] = var
-            
-            cb_frame = tk.Frame(scrollable_frame, bg=self.colors['white'], pady=3)
-            cb_frame.pack(fill=tk.X)
-            
-            cb = tk.Checkbutton(cb_frame, text=f"✂️ {service['name']}", font=("Arial", 10),
-                               variable=var, bg=self.colors['white'], fg=self.colors['text'],
-                               activebackground=self.colors['white'], selectcolor=self.colors['white'])
-            cb.pack(side=tk.LEFT)
-            checkbuttons.append(cb)
-            
-            price_label = tk.Label(cb_frame, text=f"💰 {service['price']} руб. • ⏱️ {service['duration_minutes']} мин.",
-                    font=("Arial", 9), bg=self.colors['white'], fg=self.colors['gray'])
-            price_label.pack(side=tk.RIGHT)
-        
-        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Обновляем scrollregion после создания всех элементов
-        scrollable_frame.update_idletasks()
-        canvas.configure(scrollregion=canvas.bbox("all"))
-        
-        # Привязка скролла колесом мыши
-        self.bind_mousewheel(canvas, scrollable_frame, dialog)
-        
-        def save():
-            selected_ids = [sid for sid, var in service_vars.items() if var.get()]
-            result = self.api.update_master(master_id, service_ids=selected_ids)
+            result = self.api.update_master(master['id'], name, profession_id, contact)
             
             if result["success"]:
-                messagebox.showinfo("Успех", f"✅ Услуги успешно назначены! ({len(selected_ids)} услуг)")
-                dialog.destroy()
-                self.load_masters_list()
+                self.styled_info(dialog, "Успех", "Мастер обновлен")
+                dialog.accept()
+                self.load_masters_table()
             else:
-                messagebox.showerror("Ошибка", result["error"])
+                QMessageBox.critical(dialog, "Ошибка", result["error"])
         
-        btn_frame = tk.Frame(frame, bg=self.colors['white'])
-        btn_frame.pack(fill=tk.X, pady=(15, 0))
+        save_btn.clicked.connect(update_master)
+        buttons_layout.addWidget(save_btn)
         
-        save_btn = self.create_styled_button(btn_frame, "💾 Сохранить", save, 'accent')
-        save_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5), ipady=8)
+        layout.addWidget(buttons)
         
-        cancel_btn = self.create_styled_button(btn_frame, "❌ Отмена", dialog.destroy, 'secondary')
-        cancel_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0), ipady=8)
+        dialog.exec()
     
-    def create_services_view_tab(self, parent):
+    def delete_master(self, master):
+        """Удалить мастера"""
+        confirm = self.styled_question(
+            self,
+            "Подтверждение",
+            f"Удалить мастера {master['full_name']}?"
+        )
+        
+        if confirm:
+            result = self.api.delete_master(master['id'])
+            
+            if result["success"]:
+                QMessageBox.information(self, "Успех", "Мастер удален")
+                self.load_masters_table()
+            else:
+                QMessageBox.critical(self, "Ошибка", result["error"])
+    
+    def create_services_management_tab(self):
         """Создать вкладку управления услугами"""
-        self.services_tab_frame = tk.Frame(parent, bg=self.colors['white'], padx=20, pady=20)
-        self.services_tab_frame.pack(fill=tk.BOTH, expand=True)
+        tab = QWidget()
+        tab.setStyleSheet(f"background-color: {Colors.BACKGROUND};")
         
-        header = tk.Frame(self.services_tab_frame, bg=self.colors['white'])
-        header.pack(fill=tk.X, pady=(0, 15))
+        layout = QVBoxLayout(tab)
+        layout.setSpacing(20)
+        layout.setContentsMargins(20, 20, 20, 20)
         
-        tk.Label(header, text="✂️ Управление услугами", font=("Arial", 16, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(side=tk.LEFT)
+        # Заголовок
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 0)
         
-        self.services_count_label = tk.Label(header, text="", font=("Arial", 11),
-                                            bg=self.colors['white'], fg=self.colors['gray'])
-        self.services_count_label.pack(side=tk.LEFT, padx=15)
+        title = QLabel("Управление услугами")
+        title.setFont(QFont("Arial", 24, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.PRIMARY};")
+        header_layout.addWidget(title)
         
-        btn_frame = tk.Frame(self.services_tab_frame, bg=self.colors['white'])
-        btn_frame.pack(fill=tk.X, pady=(0, 15))
+        header_layout.addStretch()
         
-        # Левая группа кнопок
-        left_btns = tk.Frame(btn_frame, bg=self.colors['white'])
-        left_btns.pack(side=tk.LEFT)
+        add_btn = ModernButton("+ Добавить услугу", "primary")
+        add_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #667EEA, stop:1 #764BA2);
+                color: white;
+                font-weight: bold;
+                font-size: 14px;
+                padding: 12px 24px;
+                border-radius: 8px;
+                border: none;
+            }}
+            QPushButton:hover {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #5A67D8, stop:1 #6B46C1);
+            }}
+            QPushButton:pressed {{
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #4C51BF, stop:1 #553C9A);
+            }}
+        """)
+        add_btn.clicked.connect(self.show_add_service_dialog)
+        header_layout.addWidget(add_btn)
         
-        add_btn = self.create_button(left_btns, "  Добавить  ", self.show_add_service_dialog)
-        add_btn.pack(side=tk.LEFT, padx=(0, 10))
+        layout.addWidget(header)
         
-        edit_btn = self.create_button(left_btns, "  Редактировать  ", self.show_edit_service_dialog)
-        edit_btn.pack(side=tk.LEFT, padx=(0, 10))
+        # Таблица услуг
+        self.services_table = QTableWidget()
+        self.services_table.setColumnCount(5)
+        self.services_table.setHorizontalHeaderLabels(["ID", "Название", "Цена", "Время (мин)", "Действия"])
         
-        delete_btn = self.create_button(left_btns, "  Удалить  ", self.delete_selected_service,
-                                       bg=self.colors['danger'])
-        delete_btn.pack(side=tk.LEFT)
+        # Настраиваем ширину колонок для оптимального отображения
+        services_header = self.services_table.horizontalHeader()
+        services_header.setStretchLastSection(False)  # Отключаем растягивание последней колонки
         
-        # Кнопка обновить справа
-        refresh_btn = self.create_button(btn_frame, "  Обновить  ", self.load_services_list)
-        refresh_btn.pack(side=tk.RIGHT)
+        # ID - компактная колонка
+        services_header.setSectionResizeMode(0, QHeaderView.Fixed)
+        self.services_table.setColumnWidth(0, 50)
         
-        self.services_stats_frame = tk.Frame(self.services_tab_frame, bg=self.colors['white'], padx=15, pady=10)
-        self.services_stats_frame.pack(fill=tk.X, pady=(0, 10))
+        # Название - растягивается, занимает оставшееся пространство
+        services_header.setSectionResizeMode(1, QHeaderView.Stretch)
+        services_header.setMinimumSectionSize(200)
         
-        # Контейнер с синей рамкой для таблицы (не expand, чтобы таблица не растягивалась)
-        table_border = tk.Frame(self.services_tab_frame, bg=self.colors['primary'], padx=1, pady=1)
-        table_border.pack(fill=tk.X, anchor=tk.N)
+        # Цена - автоподстройка под содержимое
+        services_header.setSectionResizeMode(2, QHeaderView.ResizeToContents)
         
-        table_container = tk.Frame(table_border, bg='white')
-        table_container.pack(fill=tk.BOTH, expand=True)
+        # Время - автоподстройка под содержимое
+        services_header.setSectionResizeMode(3, QHeaderView.ResizeToContents)
         
-        columns = ("id", "name", "profession", "price", "duration")
-        self.services_tree = ttk.Treeview(table_container, columns=columns, show="headings", height=18)
-        self.services_tree.tag_configure('white_bg', background='white')
+        # Действия - фиксированная ширина для двух кнопок
+        services_header.setSectionResizeMode(4, QHeaderView.Fixed)
+        self.services_table.setColumnWidth(4, 300)
         
-        self.services_tree.heading("id", text="ID")
-        self.services_tree.heading("name", text="Название")
-        self.services_tree.heading("profession", text="Профессия")
-        self.services_tree.heading("price", text="Цена")
-        self.services_tree.heading("duration", text="Время")
+        self.services_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.services_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.services_table.setAlternatingRowColors(True)
         
-        self.services_tree.column("id", width=80, anchor="center")
-        self.services_tree.column("name", width=350, anchor="w")
-        self.services_tree.column("profession", width=200, anchor="w")
-        self.services_tree.column("price", width=120, anchor="e")
-        self.services_tree.column("duration", width=120, anchor="e")
+        layout.addWidget(self.services_table)
         
-        scrollbar = tk.Scrollbar(table_container, orient=tk.VERTICAL, command=self.services_tree.yview,
-                                bg='white', troughcolor='white')
-        self.services_tree.configure(yscrollcommand=scrollbar.set)
+        self.load_services_table()
         
-        self.services_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Белый фон для оставшегося пространства
-        spacer = tk.Frame(self.services_tab_frame, bg=self.colors['white'])
-        spacer.pack(fill=tk.BOTH, expand=True)
-        
-        self.load_services_list()
+        return tab
     
-    def load_services_list(self):
-        """Загрузить список услуг"""
-        for item in self.services_tree.get_children():
-            self.services_tree.delete(item)
-        
+    def load_services_table(self):
+        """Загрузить таблицу услуг"""
         result = self.api.get_services()
         
-        if result["success"]:
-            self.services_data = result["data"]
+        if not result["success"]:
+            return
+        
+        services = result["data"]
+        self.services_table.setRowCount(len(services))
+        
+        # Устанавливаем высоту строк для видимости кнопок
+        self.services_table.verticalHeader().setDefaultSectionSize(75)
+        
+        for i, service in enumerate(services):
+            self.services_table.setItem(i, 0, QTableWidgetItem(str(service['id'])))
+            self.services_table.setItem(i, 1, QTableWidgetItem(service['name']))
+            self.services_table.setItem(i, 2, QTableWidgetItem(f"{service['price']} руб."))
+            self.services_table.setItem(i, 3, QTableWidgetItem(str(service['duration_minutes'])))
             
-            self.services_count_label.config(text=f"Всего: {len(self.services_data)}")
+            # Кнопки действий - контейнер с выравниванием по правому краю
+            actions = QWidget()
+            actions_layout = QHBoxLayout(actions)
+            actions_layout.setContentsMargins(5, 10, 10, 10)  # Вертикальные отступы для центрирования
+            actions_layout.setSpacing(8)  # Промежуток между кнопками
+            actions_layout.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             
-            for widget in self.services_stats_frame.winfo_children():
-                widget.destroy()
+            edit_btn = QPushButton("Изменить")
+            edit_btn.setFixedSize(130, 36)  # Фиксированный размер кнопки
+            edit_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {Colors.PRIMARY};
+                    color: white;
+                    font-weight: bold;
+                    font-size: 13px;
+                    border: none;
+                    border-radius: 5px;
+                    padding: 0px;
+                }}
+                QPushButton:hover {{
+                    background-color: {Colors.PRIMARY_DARK};
+                }}
+                QPushButton:pressed {{
+                    background-color: #3730A3;
+                }}
+            """)
+            edit_btn.setCursor(Qt.PointingHandCursor)
+            edit_btn.clicked.connect(lambda checked, s=service: self.show_edit_service_dialog(s))
+            actions_layout.addWidget(edit_btn)
             
-            prof_stats = {}
-            for service in self.services_data:
-                prof = service["profession"]["name"] if service.get("profession") else "Другое"
-                if prof not in prof_stats:
-                    prof_stats[prof] = 0
-                prof_stats[prof] += 1
+            delete_btn = QPushButton("Удалить")
+            delete_btn.setFixedSize(130, 36)  # Фиксированный размер кнопки
+            delete_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {Colors.DANGER};
+                    color: white;
+                    font-weight: bold;
+                    font-size: 13px;
+                    border: none;
+                    border-radius: 5px;
+                    padding: 0px;
+                }}
+                QPushButton:hover {{
+                    background-color: #DC2626;
+                }}
+                QPushButton:pressed {{
+                    background-color: #B91C1C;
+                }}
+            """)
+            delete_btn.setCursor(Qt.PointingHandCursor)
+            delete_btn.clicked.connect(lambda checked, s=service: self.delete_service(s))
+            actions_layout.addWidget(delete_btn)
             
-            tk.Label(self.services_stats_frame, text=f"Всего услуг: {len(self.services_data)}", 
-                    font=("Arial", 11, "bold"), bg=self.colors['white'], fg=self.colors['text']).pack(side=tk.LEFT)
-            
-            for prof, count in prof_stats.items():
-                tk.Label(self.services_stats_frame, text=f"  •  {prof}: {count}",
-                        font=("Arial", 10), bg=self.colors['white'], fg=self.colors['gray']).pack(side=tk.LEFT)
-            
-            for service in self.services_data:
-                profession_name = service["profession"]["name"] if service.get("profession") else ""
-                self.services_tree.insert("", "end", values=(
-                    service["id"],
-                    service["name"],
-                    profession_name,
-                    f"{service['price']} руб.",
-                    f"{service['duration_minutes']} мин."
-                ), tags=(str(service["id"]),))
+            self.services_table.setCellWidget(i, 4, actions)
     
     def show_add_service_dialog(self):
         """Показать диалог добавления услуги"""
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Добавить услугу")
-        dialog.geometry("450x450")
-        dialog.transient(self.root)
-        dialog.grab_set()
-        dialog.configure(bg=self.colors['white'])
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Добавить услугу")
+        dialog.setFixedSize(500, 580)
+        dialog.setStyleSheet(f"background-color: {Colors.WHITE};")
         
-        header = tk.Frame(dialog, bg=self.colors['secondary'], height=60)
-        header.pack(fill=tk.X)
-        header.pack_propagate(False)
-        tk.Label(header, text="➕ Добавить услугу", font=("Arial", 16, "bold"),
-                bg=self.colors['secondary'], fg=self.colors['white']).pack(pady=15)
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(15)
+        layout.setContentsMargins(30, 30, 30, 30)
         
-        frame = tk.Frame(dialog, bg=self.colors['white'], padx=25, pady=20)
-        frame.pack(fill=tk.BOTH, expand=True)
+        title = QLabel("Новая услуга")
+        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.PRIMARY};")
+        layout.addWidget(title)
         
-        tk.Label(frame, text="✂️ Название услуги:", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        name_entry = tk.Entry(frame, width=40, font=("Arial", 11), relief="solid", bd=2,
-                             bg="#0066FF", fg="white", insertbackground="white",
-                             highlightthickness=2, highlightcolor="#0066FF", highlightbackground="#0066FF")
-        name_entry.pack(fill=tk.X, pady=(5, 15), ipady=8)
+        # Название
+        name_label = QLabel("Название")
+        name_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(name_label)
         
-        tk.Label(frame, text="💼 Профессия:", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        profession_var = tk.StringVar()
+        name_input = ModernInput("Название услуги")
+        layout.addWidget(name_input)
         
+        # Профессия
+        prof_label = QLabel("Профессия")
+        prof_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(prof_label)
+        
+        prof_input = ModernInput("Введите профессию")
+        layout.addWidget(prof_input)
+        
+        # Загружаем профессии для поиска
         result = self.api.get_professions()
-        professions = []
-        profession_names = []
-        if result["success"]:
-            professions = result["data"]
-            profession_names = [p["name"] for p in professions]
+        professions = result["data"] if result["success"] else []
         
-        prof_container, _ = self.create_white_dropdown(frame, profession_var, profession_names)
-        prof_container.pack(fill=tk.X, pady=(5, 15))
+        # Цена
+        price_label = QLabel("Цена (руб.)")
+        price_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(price_label)
         
-        tk.Label(frame, text="💰 Цена (руб.):", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        price_entry = tk.Entry(frame, width=40, font=("Arial", 11), relief="solid", bd=2,
-                              bg="#0066FF", fg="white", insertbackground="white",
-                              highlightthickness=2, highlightcolor="#0066FF", highlightbackground="#0066FF")
-        price_entry.pack(fill=tk.X, pady=(5, 15), ipady=8)
+        price_input = QSpinBox()
+        price_input.setMinimum(0)
+        price_input.setMaximum(100000)
+        price_input.setValue(1000)
+        price_input.setButtonSymbols(QSpinBox.NoButtons)
+        price_input.setMinimumHeight(48)
+        price_input.setStyleSheet(f"""
+            QSpinBox {{
+                padding: 12px;
+                border: 2px solid {Colors.BORDER};
+                border-radius: 8px;
+                font-size: 14px;
+                background-color: {Colors.WHITE};
+                color: {Colors.TEXT};
+            }}
+        """)
+        layout.addWidget(price_input)
         
-        tk.Label(frame, text="⏱️ Длительность (мин.):", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        duration_entry = tk.Entry(frame, width=40, font=("Arial", 11), relief="solid", bd=2,
-                                 bg="#0066FF", fg="white", insertbackground="white",
-                                 highlightthickness=2, highlightcolor="#0066FF", highlightbackground="#0066FF")
-        duration_entry.pack(fill=tk.X, pady=(5, 20), ipady=8)
+        # Время
+        time_label = QLabel("Время (мин.)")
+        time_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(time_label)
         
-        def save():
-            name = name_entry.get().strip()
-            profession_name = profession_var.get()
-            price_str = price_entry.get().strip()
-            duration_str = duration_entry.get().strip()
+        time_input = QSpinBox()
+        time_input.setMinimum(15)
+        time_input.setMaximum(480)
+        time_input.setValue(60)
+        time_input.setSingleStep(15)
+        time_input.setButtonSymbols(QSpinBox.NoButtons)
+        time_input.setMinimumHeight(48)
+        time_input.setStyleSheet(f"""
+            QSpinBox {{
+                padding: 12px;
+                border: 2px solid {Colors.BORDER};
+                border-radius: 8px;
+                font-size: 14px;
+                background-color: {Colors.WHITE};
+                color: {Colors.TEXT};
+            }}
+        """)
+        layout.addWidget(time_input)
+        
+        layout.addStretch()
+        
+        # Кнопки
+        buttons = QWidget()
+        buttons_layout = QHBoxLayout(buttons)
+        
+        cancel_btn = ModernButton("Отмена", "secondary")
+        cancel_btn.setStyleSheet(f"""
+            background-color: {Colors.WHITE};
+            color: {Colors.PRIMARY};
+            border: 2px solid {Colors.PRIMARY};
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+        """)
+        cancel_btn.clicked.connect(dialog.reject)
+        buttons_layout.addWidget(cancel_btn)
+        
+        save_btn = ModernButton("Сохранить", "primary")
+        save_btn.setStyleSheet("""
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #667EEA, stop:1 #764BA2);
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+        """)
+        
+        def save_service():
+            name = name_input.text().strip()
+            profession_name = prof_input.text().strip()
+            price = price_input.value()
+            duration = time_input.value()
             
-            if not name or not profession_name or not price_str or not duration_str:
-                messagebox.showwarning("Внимание", "Заполните все поля")
+            if not name:
+                QMessageBox.warning(dialog, "Внимание", "Введите название")
                 return
             
-            try:
-                price = float(price_str)
-                duration = int(duration_str)
-            except ValueError:
-                messagebox.showwarning("Внимание", "Цена и длительность должны быть числами")
-                return
-            
-            profession_id = next((p["id"] for p in professions if p["name"] == profession_name), None)
+            # Ищем профессию по имени
+            profession_id = None
+            for prof in professions:
+                if prof['name'].lower() == profession_name.lower():
+                    profession_id = prof['id']
+                    break
             
             result = self.api.create_service(name, price, duration, profession_id)
             
             if result["success"]:
-                messagebox.showinfo("Успех", "✅ Услуга успешно добавлена!")
-                dialog.destroy()
-                self.load_services_list()
+                self.styled_info(dialog, "Успех", "Услуга добавлена")
+                dialog.accept()
+                self.load_services_table()
             else:
-                messagebox.showerror("Ошибка", result["error"])
+                QMessageBox.critical(dialog, "Ошибка", result["error"])
         
-        btn_frame = tk.Frame(frame, bg=self.colors['white'])
-        btn_frame.pack(fill=tk.X)
+        save_btn.clicked.connect(save_service)
+        buttons_layout.addWidget(save_btn)
         
-        save_btn = self.create_styled_button(btn_frame, "💾 Сохранить", save, 'accent')
-        save_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5), ipady=8)
+        layout.addWidget(buttons)
         
-        cancel_btn = self.create_styled_button(btn_frame, "❌ Отмена", dialog.destroy, 'secondary')
-        cancel_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0), ipady=8)
+        dialog.exec()
     
-    def show_edit_service_dialog(self):
+    def show_edit_service_dialog(self, service):
         """Показать диалог редактирования услуги"""
-        selection = self.services_tree.selection()
-        if not selection:
-            messagebox.showwarning("Внимание", "Выберите услугу")
-            return
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Редактировать услугу")
+        dialog.setFixedSize(500, 580)
+        dialog.setStyleSheet(f"background-color: {Colors.WHITE};")
         
-        item = self.services_tree.item(selection[0])
-        service_id = int(item["tags"][0])
-        service = next((s for s in self.services_data if s["id"] == service_id), None)
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(15)
+        layout.setContentsMargins(30, 30, 30, 30)
         
-        if not service:
-            return
+        title = QLabel("Редактирование")
+        title.setFont(QFont("Arial", 18, QFont.Bold))
+        title.setStyleSheet(f"color: {Colors.PRIMARY};")
+        layout.addWidget(title)
         
-        dialog = tk.Toplevel(self.root)
-        dialog.title("Редактировать услугу")
-        dialog.geometry("450x450")
-        dialog.transient(self.root)
-        dialog.grab_set()
-        dialog.configure(bg=self.colors['white'])
+        # Название
+        name_label = QLabel("Название")
+        name_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(name_label)
         
-        header = tk.Frame(dialog, bg=self.colors['secondary'], height=60)
-        header.pack(fill=tk.X)
-        header.pack_propagate(False)
-        tk.Label(header, text="✏️ Редактировать услугу", font=("Arial", 16, "bold"),
-                bg=self.colors['secondary'], fg=self.colors['white']).pack(pady=15)
+        name_input = ModernInput()
+        name_input.setText(service['name'])
+        layout.addWidget(name_input)
         
-        frame = tk.Frame(dialog, bg=self.colors['white'], padx=25, pady=20)
-        frame.pack(fill=tk.BOTH, expand=True)
+        # Профессия
+        prof_label = QLabel("Профессия")
+        prof_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(prof_label)
         
-        tk.Label(frame, text="✂️ Название услуги:", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        name_entry = tk.Entry(frame, width=40, font=("Arial", 11), relief="solid", bd=2,
-                             bg="#0066FF", fg="white", insertbackground="white",
-                             highlightthickness=2, highlightcolor="#0066FF", highlightbackground="#0066FF")
-        name_entry.insert(0, service["name"])
-        name_entry.pack(fill=tk.X, pady=(5, 15), ipady=8)
-        
-        tk.Label(frame, text="💼 Профессия:", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        profession_var = tk.StringVar()
-        
+        prof_input = ModernInput()
+        # Устанавливаем текущую профессию
         result = self.api.get_professions()
-        professions = []
-        profession_names = []
-        if result["success"]:
-            professions = result["data"]
-            profession_names = [p["name"] for p in professions]
-            if service.get("profession"):
-                profession_var.set(service["profession"]["name"])
+        professions = result["data"] if result["success"] else []
+        for prof in professions:
+            if prof['id'] == service.get('profession_id'):
+                prof_input.setText(prof['name'])
+                break
+        layout.addWidget(prof_input)
         
-        prof_container, _ = self.create_white_dropdown(frame, profession_var, profession_names)
-        prof_container.pack(fill=tk.X, pady=(5, 15))
+        # Цена
+        price_label = QLabel("Цена (руб.)")
+        price_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(price_label)
         
-        tk.Label(frame, text="💰 Цена (руб.):", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        price_entry = tk.Entry(frame, width=40, font=("Arial", 11), relief="solid", bd=2,
-                              bg="#0066FF", fg="white", insertbackground="white",
-                              highlightthickness=2, highlightcolor="#0066FF", highlightbackground="#0066FF")
-        price_entry.insert(0, str(service["price"]))
-        price_entry.pack(fill=tk.X, pady=(5, 15), ipady=8)
+        price_input = QSpinBox()
+        price_input.setMinimum(0)
+        price_input.setMaximum(100000)
+        price_input.setValue(int(service['price']))
+        price_input.setButtonSymbols(QSpinBox.NoButtons)
+        price_input.setMinimumHeight(48)
+        price_input.setStyleSheet(f"""
+            QSpinBox {{
+                padding: 12px;
+                border: 2px solid {Colors.BORDER};
+                border-radius: 8px;
+                font-size: 14px;
+                background-color: {Colors.WHITE};
+                color: {Colors.TEXT};
+            }}
+        """)
+        layout.addWidget(price_input)
         
-        tk.Label(frame, text="⏱️ Длительность (мин.):", font=("Arial", 11, "bold"),
-                bg=self.colors['white'], fg=self.colors['primary']).pack(anchor=tk.W)
-        duration_entry = tk.Entry(frame, width=40, font=("Arial", 11), relief="solid", bd=2,
-                                 bg="#0066FF", fg="white", insertbackground="white",
-                                 highlightthickness=2, highlightcolor="#0066FF", highlightbackground="#0066FF")
-        duration_entry.insert(0, str(service["duration_minutes"]))
-        duration_entry.pack(fill=tk.X, pady=(5, 20), ipady=8)
+        # Время
+        time_label = QLabel("Время (мин.)")
+        time_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(time_label)
         
-        def save():
-            name = name_entry.get().strip()
-            profession_name = profession_var.get()
-            price_str = price_entry.get().strip()
-            duration_str = duration_entry.get().strip()
+        time_input = QSpinBox()
+        time_input.setMinimum(15)
+        time_input.setMaximum(480)
+        time_input.setValue(service['duration_minutes'])
+        time_input.setSingleStep(15)
+        time_input.setButtonSymbols(QSpinBox.NoButtons)
+        time_input.setMinimumHeight(48)
+        time_input.setStyleSheet(f"""
+            QSpinBox {{
+                padding: 12px;
+                border: 2px solid {Colors.BORDER};
+                border-radius: 8px;
+                font-size: 14px;
+                background-color: {Colors.WHITE};
+                color: {Colors.TEXT};
+            }}
+        """)
+        layout.addWidget(time_input)
+        
+        layout.addStretch()
+        
+        # Кнопки
+        buttons = QWidget()
+        buttons_layout = QHBoxLayout(buttons)
+        
+        cancel_btn = ModernButton("Отмена", "secondary")
+        cancel_btn.setStyleSheet(f"""
+            background-color: {Colors.WHITE};
+            color: {Colors.PRIMARY};
+            border: 2px solid {Colors.PRIMARY};
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+        """)
+        cancel_btn.clicked.connect(dialog.reject)
+        buttons_layout.addWidget(cancel_btn)
+        
+        save_btn = ModernButton("Сохранить", "primary")
+        save_btn.setStyleSheet("""
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                stop:0 #667EEA, stop:1 #764BA2);
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            border: none;
+        """)
+        
+        def update_service():
+            name = name_input.text().strip()
+            profession_name = prof_input.text().strip()
+            price = price_input.value()
+            duration = time_input.value()
             
             if not name:
-                messagebox.showwarning("Внимание", "Введите название")
+                QMessageBox.warning(dialog, "Внимание", "Введите название")
                 return
             
-            try:
-                price = float(price_str) if price_str else None
-                duration = int(duration_str) if duration_str else None
-            except ValueError:
-                messagebox.showwarning("Внимание", "Цена и длительность должны быть числами")
-                return
+            # Ищем профессию по имени
+            profession_id = None
+            for prof in professions:
+                if prof['name'].lower() == profession_name.lower():
+                    profession_id = prof['id']
+                    break
             
-            profession_id = next((p["id"] for p in professions if p["name"] == profession_name), None)
-            
-            result = self.api.update_service(service_id, name, price, duration, profession_id)
+            result = self.api.update_service(service['id'], name, price, duration, profession_id)
             
             if result["success"]:
-                messagebox.showinfo("Успех", "✅ Услуга успешно обновлена!")
-                dialog.destroy()
-                self.load_services_list()
+                self.styled_info(dialog, "Успех", "Услуга обновлена")
+                dialog.accept()
+                self.load_services_table()
             else:
-                messagebox.showerror("Ошибка", result["error"])
+                QMessageBox.critical(dialog, "Ошибка", result["error"])
         
-        btn_frame = tk.Frame(frame, bg=self.colors['white'])
-        btn_frame.pack(fill=tk.X)
+        save_btn.clicked.connect(update_service)
+        buttons_layout.addWidget(save_btn)
         
-        save_btn = self.create_styled_button(btn_frame, "💾 Сохранить", save, 'accent')
-        save_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5), ipady=8)
+        layout.addWidget(buttons)
         
-        cancel_btn = self.create_styled_button(btn_frame, "❌ Отмена", dialog.destroy, 'secondary')
-        cancel_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0), ipady=8)
+        dialog.exec()
     
-    def delete_selected_service(self):
-        """Удалить выбранную услугу"""
-        selection = self.services_tree.selection()
-        if not selection:
-            messagebox.showwarning("Внимание", "Выберите услугу")
-            return
+    def delete_service(self, service):
+        """Удалить услугу"""
+        confirm = self.styled_question(
+            self,
+            "Подтверждение",
+            f"Удалить услугу {service['name']}?"
+        )
         
-        item = self.services_tree.item(selection[0])
-        service_id = int(item["tags"][0])
-        
-        if messagebox.askyesno("Подтверждение", "Вы уверены, что хотите удалить эту услугу?"):
-            result = self.api.delete_service(service_id)
+        if confirm:
+            result = self.api.delete_service(service['id'])
+            
             if result["success"]:
-                messagebox.showinfo("Успех", "Услуга удалена")
-                self.load_services_list()
+                QMessageBox.information(self, "Успех", "Услуга удалена")
+                self.load_services_table()
             else:
-                messagebox.showerror("Ошибка", result["error"])
+                QMessageBox.critical(self, "Ошибка", result["error"])
+
+
+def main():
+    # Создание приложения
+    app = QApplication(sys.argv)
+    
+    # Fusion стиль для единообразного отображения на всех ОС
+    app.setStyle('Fusion')
+    
+    # Установка кодировки для Windows
+    if sys.platform == 'win32':
+        import locale
+        locale.setlocale(locale.LC_ALL, '')
+    
+    # Установка шрифта по умолчанию
+    default_font = QFont("Arial", 10)
+    app.setFont(default_font)
+    
+    window = BeautyProApp()
+    window.show()
+    
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    app = BeautyProApp(root)
-    root.mainloop()
+    main()

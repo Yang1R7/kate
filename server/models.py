@@ -55,12 +55,12 @@ class Master(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     full_name: Mapped[str] = mapped_column(String(100))
-    profession_id: Mapped[int] = mapped_column(ForeignKey("professions.id"))
+    profession_id: Mapped[Optional[int]] = mapped_column(ForeignKey("professions.id"), nullable=True)
     contact_info: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(default=True)  # Для "мягкого" удаления
 
     # Связи
-    profession: Mapped["Profession"] = relationship(back_populates="masters")
+    profession: Mapped[Optional["Profession"]] = relationship(back_populates="masters")
     services: Mapped[List["Service"]] = relationship(
         secondary=master_services,
         back_populates="masters"
@@ -79,10 +79,10 @@ class Service(Base):
     name: Mapped[str] = mapped_column(String(100))
     price: Mapped[float] = mapped_column(Float)
     duration_minutes: Mapped[int] = mapped_column(Integer)
-    profession_id: Mapped[int] = mapped_column(ForeignKey("professions.id"))
+    profession_id: Mapped[Optional[int]] = mapped_column(ForeignKey("professions.id"), nullable=True)
 
     # Связи
-    profession: Mapped["Profession"] = relationship(back_populates="services")
+    profession: Mapped[Optional["Profession"]] = relationship(back_populates="services")
     masters: Mapped[List["Master"]] = relationship(
         secondary=master_services,
         back_populates="services"
