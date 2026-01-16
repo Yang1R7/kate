@@ -2306,7 +2306,7 @@ class BeautyProApp(QMainWindow):
         """Показать диалог добавления мастера"""
         dialog = QDialog(self)
         dialog.setWindowTitle("Добавить мастера")
-        dialog.setFixedSize(500, 480)
+        dialog.setFixedSize(550, 650)
         dialog.setStyleSheet(f"background-color: {Colors.WHITE};")
         
         layout = QVBoxLayout(dialog)
@@ -2345,6 +2345,54 @@ class BeautyProApp(QMainWindow):
         
         contact_input = ModernInput("Телефон или email")
         layout.addWidget(contact_input)
+        
+        # Услуги
+        services_label = QLabel("Услуги мастера")
+        services_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(services_label)
+        
+        # Загружаем услуги
+        services_result = self.api.get_services()
+        all_services = services_result["data"] if services_result["success"] else []
+        
+        # Скроллируемая область для чекбоксов услуг
+        services_scroll = QScrollArea()
+        services_scroll.setWidgetResizable(True)
+        services_scroll.setMaximumHeight(150)
+        services_scroll.setStyleSheet("background-color: transparent; border: 1px solid #E2E8F0; border-radius: 8px;")
+        
+        services_widget = QWidget()
+        services_layout = QVBoxLayout(services_widget)
+        services_layout.setSpacing(8)
+        services_layout.setContentsMargins(10, 10, 10, 10)
+        
+        service_checkboxes = {}
+        for service in all_services:
+            checkbox = QCheckBox(f"{service['name']} ({service['price']} руб.)")
+            checkbox.setStyleSheet(f"""
+                QCheckBox {{
+                    color: {Colors.TEXT};
+                    font-size: 12px;
+                    padding: 4px;
+                }}
+                QCheckBox::indicator {{
+                    width: 18px;
+                    height: 18px;
+                    border: 2px solid {Colors.PRIMARY};
+                    border-radius: 4px;
+                    background-color: white;
+                }}
+                QCheckBox::indicator:checked {{
+                    background-color: {Colors.PRIMARY};
+                    border-color: {Colors.PRIMARY};
+                }}
+            """)
+            service_checkboxes[service['id']] = checkbox
+            services_layout.addWidget(checkbox)
+        
+        services_layout.addStretch()
+        services_scroll.setWidget(services_widget)
+        layout.addWidget(services_scroll)
         
         layout.addStretch()
         
@@ -2392,7 +2440,10 @@ class BeautyProApp(QMainWindow):
                     profession_id = prof['id']
                     break
             
-            result = self.api.create_master(name, profession_id, contact)
+            # Собираем выбранные услуги
+            selected_service_ids = [service_id for service_id, checkbox in service_checkboxes.items() if checkbox.isChecked()]
+            
+            result = self.api.create_master(name, profession_id, contact, selected_service_ids)
             
             if result["success"]:
                 self.styled_info(dialog, "Успех", "Мастер добавлен")
@@ -2412,7 +2463,7 @@ class BeautyProApp(QMainWindow):
         """Показать диалог редактирования мастера"""
         dialog = QDialog(self)
         dialog.setWindowTitle("Редактировать мастера")
-        dialog.setFixedSize(500, 480)
+        dialog.setFixedSize(550, 650)
         dialog.setStyleSheet(f"background-color: {Colors.WHITE};")
         
         layout = QVBoxLayout(dialog)
@@ -2456,6 +2507,60 @@ class BeautyProApp(QMainWindow):
         contact_input = ModernInput()
         contact_input.setText(master.get('contact_info', ''))
         layout.addWidget(contact_input)
+        
+        # Услуги
+        services_label = QLabel("Услуги мастера")
+        services_label.setFont(QFont("Arial", 12, QFont.Bold))
+        layout.addWidget(services_label)
+        
+        # Загружаем услуги
+        services_result = self.api.get_services()
+        all_services = services_result["data"] if services_result["success"] else []
+        
+        # Получаем текущие услуги мастера
+        current_service_ids = [s['id'] for s in master.get('services', [])]
+        
+        # Скроллируемая область для чекбоксов услуг
+        services_scroll = QScrollArea()
+        services_scroll.setWidgetResizable(True)
+        services_scroll.setMaximumHeight(150)
+        services_scroll.setStyleSheet("background-color: transparent; border: 1px solid #E2E8F0; border-radius: 8px;")
+        
+        services_widget = QWidget()
+        services_layout = QVBoxLayout(services_widget)
+        services_layout.setSpacing(8)
+        services_layout.setContentsMargins(10, 10, 10, 10)
+        
+        service_checkboxes = {}
+        for service in all_services:
+            checkbox = QCheckBox(f"{service['name']} ({service['price']} руб.)")
+            checkbox.setStyleSheet(f"""
+                QCheckBox {{
+                    color: {Colors.TEXT};
+                    font-size: 12px;
+                    padding: 4px;
+                }}
+                QCheckBox::indicator {{
+                    width: 18px;
+                    height: 18px;
+                    border: 2px solid {Colors.PRIMARY};
+                    border-radius: 4px;
+                    background-color: white;
+                }}
+                QCheckBox::indicator:checked {{
+                    background-color: {Colors.PRIMARY};
+                    border-color: {Colors.PRIMARY};
+                }}
+            """)
+            # Отмечаем текущие услуги мастера
+            if service['id'] in current_service_ids:
+                checkbox.setChecked(True)
+            service_checkboxes[service['id']] = checkbox
+            services_layout.addWidget(checkbox)
+        
+        services_layout.addStretch()
+        services_scroll.setWidget(services_widget)
+        layout.addWidget(services_scroll)
         
         layout.addStretch()
         
@@ -2503,7 +2608,10 @@ class BeautyProApp(QMainWindow):
                     profession_id = prof['id']
                     break
             
-            result = self.api.update_master(master['id'], name, profession_id, contact)
+            # Собираем выбранные услуги
+            selected_service_ids = [service_id for service_id, checkbox in service_checkboxes.items() if checkbox.isChecked()]
+            
+            result = self.api.update_master(master['id'], name, profession_id, contact, selected_service_ids)
             
             if result["success"]:
                 self.styled_info(dialog, "Успех", "Мастер обновлен")

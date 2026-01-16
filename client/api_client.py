@@ -145,17 +145,18 @@ class BeautyProAPI:
     def create_master(
         self, 
         full_name: str, 
-        profession_id: int, 
+        profession_id: Optional[int] = None, 
         contact_info: str = "",
         service_ids: List[int] = None
     ) -> Dict:
         """Создать нового мастера"""
         data = {
             "full_name": full_name,
-            "profession_id": profession_id,
             "contact_info": contact_info,
             "service_ids": service_ids or []
         }
+        if profession_id is not None:
+            data["profession_id"] = profession_id
         return self._request("POST", "/api/masters", data)
     
     def update_master(
